@@ -1,0 +1,73 @@
+# ========================
+# .NET / Backend
+# ========================
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+*.userprefs
+
+# Ignore configuration with secrets
+appsettings.json
+appsettings.Development.json
+
+# Keep the example file if you create one (Optional best practice)
+!appsettings.Example.json
+
+# ========================
+# Angular / Frontend
+# ========================
+node_modules/
+dist/
+.angular/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS Generated
+.DS_Store
+Thumbs.db
+
+
+# See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+
+# Compiled output
+/dist
+/tmp
+/out-tsc
+/bazel-out
+
+# Node
+/node_modules
+npm-debug.log
+yarn-error.log
+
+# IDEs and editors
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/*
+
+# Miscellaneous
+/.angular/cache
+.sass-cache/
+/connect.lock
+/coverage
+/libpeerconnection.log
+testem.log
+/typings
+__screenshots__/
