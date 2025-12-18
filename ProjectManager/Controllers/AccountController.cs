@@ -210,6 +210,54 @@ namespace ProjectManager.Controllers
         }
 
 
+        // Forget Password Endpoint
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto model)
+        {
+            var user = await _userManager.FindByEmailAsync(model.Email);
+            if (user == null || !(await _userManager.IsEmailConfirmedAsync(user)))
+            {
+                // Don't reveal that the user does not exist or is not confirmed
+                return Ok(new { message = "If an account with that email exists, a password reset link has been sent." });
+            }
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var encodedToken = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(token));
+            var clientSettings = _configuration.GetSection("Client");
+            var clientUrl = clientSettings["Url"] ?? "http://localhost:4200";
+            var callbackUrl = $"{clientUrl}/reset-password?userId={user.Id}&token={encodedToken}";
+            await _emailSender.SendEmailAsync(user.Email, "Reset Password",
+                $"Please reset your password by clicking here: <a href='{callbackUrl}'>link</a>");
+            return Ok(new { message = "If an account with that email exists, a password reset link has been sent." });
+        }
+
+        // Reset Password Endpoint
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto model)
+        {
+            var user = await _userManager.FindByIdAsync(model.UserId);
+            if (user == null)
+            {
+                // Don't reveal that the user does not exist
+                return BadRequest("Invalid request.");
+            }
+            // Decode the Base64 token
+            string decodedToken;
+            try
+            {
+                decodedToken = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(model.Token));
+            }
+            catch
+            {
+                return BadRequest("Invalid token format.");
+            }
+            var result = await _userManager.ResetPasswordAsync(user, decodedToken, model.NewPassword);
+            if (result.Succeeded)
+            {
+                return Ok(new { message = "Password has been reset successfully." });
+            }
+            return BadRequest(new { message = "Password reset failed.", errors = result.Errors });
+        }
+
 
     }
 
