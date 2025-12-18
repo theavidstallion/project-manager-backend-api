@@ -39,20 +39,33 @@ namespace ProjectManager.Controllers
 
         // --- 1. Registration Endpoint (Only for Members) ---
 
-        [HttpPost("register")] // Route: api/Account/register
+        [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDto registerDto)
         {
-            // Requirement: Only used for creating Member users.
             const string MemberRole = "Member";
+            var user = await _userManager.FindByEmailAsync(registerDto.Email);
 
-            // Check if user already exists
-            if (await _userManager.FindByEmailAsync(registerDto.Email) != null)
+            // SCENARIO 1: User exists but is NOT confirmed -> Resend Email
+            if (user != null && !user.EmailConfirmed)
+            {
+                // Optional: Ensure they have the role (Safe check)
+                if (!await _userManager.IsInRoleAsync(user, MemberRole))
+                {
+                    await _userManager.AddToRoleAsync(user, MemberRole);
+                }
+
+                await SendConfirmationEmailAsync(user);
+                return Ok(new { message = "Your email is already registered. Please check your email to confirm your account." });
+            }
+
+            // SCENARIO 2: User exists AND is confirmed -> Error
+            if (user != null)
             {
                 return BadRequest("Email address is already in use.");
             }
 
-            // Create the new user entity
-            var user = new ApplicationUser
+            // SCENARIO 3: New User -> Create
+            user = new ApplicationUser
             {
                 UserName = registerDto.Email,
                 Email = registerDto.Email,
@@ -60,31 +73,36 @@ namespace ProjectManager.Controllers
                 LastName = registerDto.LastName
             };
 
-            // Create user with password
             var result = await _userManager.CreateAsync(user, registerDto.Password);
 
             if (result.Succeeded)
             {
-                // Requirement: Every user who registers automatically becomes a Member.
                 if (await _roleManager.RoleExistsAsync(MemberRole))
                 {
                     await _userManager.AddToRoleAsync(user, MemberRole);
                 }
 
-                var clientSettings = _configuration.GetSection("Client");
-                var clientUrl = clientSettings["Url"] ?? "http://localhost:4200";
-                // Generate Email Confirmation Token
-                var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-                var encodedToken = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(token));
-                var callbackUrl = $"{clientUrl}/confirm-email?userId={user.Id}&token={encodedToken}";
-                // Send confirmation email
-                await _emailSender.SendEmailAsync(user.Email, "Confirm your email", $"Please confirm your account by clicking this link: <a href='{callbackUrl}'>link</a>");
-
+                await SendConfirmationEmailAsync(user);
                 return Ok(new { message = "Registration successful. Please check your email to confirm your account." });
             }
 
-            // If creation failed (e.g., password complexity)
             return BadRequest(result.Errors);
+        }
+
+        // --- HELPER METHOD TO SEND CONFIRMATION EMAIL (Keeps controller clean) ---
+        private async Task SendConfirmationEmailAsync(ApplicationUser user)
+        {
+            var clientSettings = _configuration.GetSection("Client");
+            var clientUrl = clientSettings["Url"] ?? "http://localhost:4200";
+
+            var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+            // Important: Use WebEncoders for URL safety, though Base64 is okay if careful
+            var encodedToken = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(token));
+
+            var callbackUrl = $"{clientUrl}/confirm-email?userId={user.Id}&token={encodedToken}";
+
+            await _emailSender.SendEmailAsync(user.Email, "Confirm your email",
+                $"Please confirm your account by clicking this link: <a href='{callbackUrl}'>link</a>");
         }
 
         // --- 2. Login Endpoint (For Admin, Manager, and Member) ---
@@ -104,7 +122,8 @@ namespace ProjectManager.Controllers
             // Check if email is confirmed
             if (!await _userManager.IsEmailConfirmedAsync(user))
             {
-                return Unauthorized("Please confirm your email address before logging in.");
+                await SendConfirmationEmailAsync(user);
+                return StatusCode(403, new { message = "Email not confirmed. A new confirmation link has been sent to your email." });
             }
 
             // Attempt to sign in the user
