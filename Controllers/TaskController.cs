@@ -187,29 +187,50 @@ namespace ProjectManager.Controllers
 
 
         // This action will result in replacing the previous assigned user with the new one.
-        // Assign Tasks to User
-        [Authorize(Roles = "Admin, Manager")]
+        // Assigned Members, Managers of the Project, and Admins can re-assign tasks.
         [HttpPost("{id}/assign")] // Route: PUT /api/Task/{id}/assign
         public async Task<IActionResult> AssignUserToTask(int id, [FromBody] TaskAssignDto model)
         {
-            var task = await _context.Tasks.FindAsync(id);
+            var task = await _context.Tasks
+                .Include(t => t.Project)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            
-            if (currentUserId != task.CreatorId)
-            {
-                return StatusCode(503, new { message = "Managers can only add users to tasks they manage/created." });
-            }
 
-            try { 
-                task.AssignedUserId = model.NewAssignedUserId;
-                await _context.SaveChangesAsync();
-            }
-            catch (DbException)
+            if (task == null)
             {
-                return StatusCode(500, new {message = "Could not save to database successfully!"});
+                return NotFound(new { Message = "Task not found." });
             }
-
+            // Authorization Check
+            if (User.IsInRole("Admin"))
+            {
+                // Admins can re-assign any task
+            }
+            else if (User.IsInRole("Manager"))
+            {
+                // Managers can re-assign tasks only within projects they manage
+                if (task.Project.CreatorId != currentUserId)
+                {
+                    return StatusCode(403, new { message = "Managers can only re-assign tasks within projects they manage." });
+                }
+            }
+            else if (User.IsInRole("Member"))
+            {
+                // Assigned Members can re-assign their own tasks
+                if (task.AssignedUserId != currentUserId)
+                {
+                    return StatusCode(403, new { message = "Members can only re-assign tasks assigned to them." });
+                }
+            }
+            else
+            {
+                return StatusCode(403, new { message = "Access denied: Insufficient role permissions." });
+            }
+            // Perform Re-assignment
+            task.AssignedUserId = model.NewAssignedUserId;
+            await _context.SaveChangesAsync();
             return NoContent();
+
         }
 
 
@@ -438,6 +459,9 @@ namespace ProjectManager.Controllers
             await _context.SaveChangesAsync();
             return NoContent();
         }
+
+
+
 
     }
 }
