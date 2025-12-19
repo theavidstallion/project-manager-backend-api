@@ -138,7 +138,7 @@ app.UseHttpsRedirection();
 
 // CORS policy, allow for localhost:4200
 app.UseCors(policy =>
-    policy.WithOrigins("http://localhost:4200")
+    policy.WithOrigins("https://humble-project-manager.netlify.app") 
           .AllowAnyHeader()
           .AllowAnyMethod());
 

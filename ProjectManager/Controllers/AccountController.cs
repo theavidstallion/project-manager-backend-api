@@ -223,7 +223,7 @@ namespace ProjectManager.Controllers
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
             var encodedToken = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(token));
             var clientSettings = _configuration.GetSection("Client");
-            var clientUrl = clientSettings["Url"] ?? "http://localhost:4200";
+            var clientUrl = clientSettings["Url"] ?? "https://humble-project-manager.netlify.app";
             var callbackUrl = $"{clientUrl}/reset-password?userId={user.Id}&token={encodedToken}";
             await _emailSender.SendEmailAsync(user.Email, "Reset Password",
                 $"Please reset your password by clicking here: <a href='{callbackUrl}'>link</a>");
