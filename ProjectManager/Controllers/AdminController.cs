@@ -65,7 +65,7 @@ namespace ProjectManager.Controllers
         {
             // 2. Fetch the full User Entities in one go (await)
             // We fetch the actual ApplicationUser objects so we can pass them directly to GetRolesAsync
-            var users = await _userManager.Users.ToListAsync();
+            var users = await _userManager.Users.Where(u => u.Email != "admin@project.com").ToListAsync();
 
             var usersWithRoles = new List<object>();
 

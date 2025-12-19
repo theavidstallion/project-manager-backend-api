@@ -1,73 +1,43 @@
 # ========================
-# .NET / Backend
+# .NET Core / Build Output
 # ========================
 [Bb]in/
 [Oo]bj/
+/out
+/publish
+
+# ========================
+# IDE & Visual Studio
+# ========================
 .vs/
+.vscode/
 *.user
 *.suo
 *.userprefs
+*.launch
+.idea/
 
-# Ignore configuration with secrets
+# ========================
+# Configuration & Secrets
+# ========================
+# CRITICAL: Never commit your production keys/passwords
 appsettings.json
 appsettings.Development.json
+appsettings.Production.json
 
-# Keep the example file if you create one (Optional best practice)
+# (Optional) Keep an example file so devs know what structure to use
 !appsettings.Example.json
 
 # ========================
-# Angular / Frontend
+# Logs & Diagnostics
 # ========================
-node_modules/
-dist/
-.angular/
-.vscode/
-
-# Logs
+# Ignores the Logs folder anywhere in the project (Root or inside ProjectManager)
+Logs/
+**/Logs/
 *.log
-npm-debug.log*
 
-# OS Generated
+# ========================
+# OS Generated Files
+# ========================
 .DS_Store
 Thumbs.db
-
-
-# See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
-
-# Compiled output
-/dist
-/tmp
-/out-tsc
-/bazel-out
-
-# Node
-/node_modules
-npm-debug.log
-yarn-error.log
-
-# IDEs and editors
-.idea/
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
-
-# Visual Studio Code
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-.history/*
-
-# Miscellaneous
-/.angular/cache
-.sass-cache/
-/connect.lock
-/coverage
-/libpeerconnection.log
-testem.log
-/typings
-__screenshots__/
