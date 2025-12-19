@@ -86,7 +86,7 @@ namespace ProjectManager.Controllers
                 return Ok(new { message = "Registration successful. Please check your email to confirm your account." });
             }
 
-            return BadRequest(result.Errors);
+            return BadRequest(new { message = result.Errors });
         }
 
         // --- HELPER METHOD TO SEND CONFIRMATION EMAIL (Keeps controller clean) ---
@@ -116,7 +116,7 @@ namespace ProjectManager.Controllers
 
             if (user == null)
             {
-                return Unauthorized("Invalid email or password.");
+                return Unauthorized(new { message = "Invalid email or password." });
             }
 
             // Check if email is confirmed
@@ -147,7 +147,7 @@ namespace ProjectManager.Controllers
             }
 
             // Failure case
-            return Unauthorized("Invalid email or password.");
+            return Unauthorized( new { message = "Invalid email or password." });
         }
 
 
