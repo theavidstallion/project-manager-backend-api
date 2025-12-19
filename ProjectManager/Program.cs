@@ -42,8 +42,17 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditService, AuditService>();
 
 // 1b. Database & Identity
+// Pre 500.30 error
+//builder.Services.AddDbContext<ApplicationDbContext>(options =>
+//     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sqlOptions => sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null)
+    ));
 
 // IMPORTANT: Configure Identity to NOT add default authentication scheme
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -136,7 +145,7 @@ if (app.Environment.IsDevelopment())
 // 2c. Standard Middleware
 app.UseHttpsRedirection();
 
-// CORS policy, allow for localhost:4200
+// CORS policy, allow for frontend client.
 app.UseCors(policy =>
     policy.WithOrigins("https://humble-project-manager.netlify.app") 
           .AllowAnyHeader()
