@@ -21,7 +21,6 @@
 # Configuration & Secrets
 # ========================
 # CRITICAL: Never commit your production keys/passwords
-appsettings.json
 appsettings.Development.json
 appsettings.Production.json
 

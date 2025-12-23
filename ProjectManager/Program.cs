@@ -147,7 +147,7 @@ app.UseHttpsRedirection();
 
 // CORS policy, allow for frontend client.
 app.UseCors(policy =>
-    policy.WithOrigins("https://humble-project-manager.netlify.app") 
+    policy.WithOrigins("https://humble-project-manager.netlify.app", "http://localhost:4200") 
           .AllowAnyHeader()
           .AllowAnyMethod());
 
