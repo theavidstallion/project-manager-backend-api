@@ -91,5 +91,12 @@ namespace ProjectManager.Repositories
         }
         //-------------------------------------------------
 
+
+        // Get task by ID
+        public async Task<ProjectTask?> GetTaskByIdAsync(int id)
+        {
+            return await GetBaseTaskQuery().FirstOrDefaultAsync(t => t.Id == id);
+        }
+
     }
 }

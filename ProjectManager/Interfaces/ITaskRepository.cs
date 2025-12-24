@@ -5,7 +5,8 @@ namespace ProjectManager.Interfaces
     public interface ITaskRepository
     {
         Task<ProjectTask> CreateTaskAsync(ProjectTask task, List<int> tagIds);
-        //Task<ProjectTask?> GetTaskByIdAsync(int id);
+        
+        Task<ProjectTask?> GetTaskByIdAsync(int id);
 
 
         // Tasks on Dashboard page for admins
