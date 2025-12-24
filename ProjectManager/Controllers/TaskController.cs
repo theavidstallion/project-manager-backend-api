@@ -85,51 +85,68 @@ namespace ProjectManager.Controllers
 
         }
 
-
-        // Get Tasks
-        [HttpGet] // Route: api/Tasks
-        public async Task<IActionResult> GetTasksAsync()
+        // Get Tasks - with filtering based on Role and optional ProjectId
+        [HttpGet] // Route: api/Task?projectId=5 or just api/Task
+        public async Task<IActionResult> GetTasksAsync([FromQuery] int? projectId)
         {
-            // Fetch user ID once from the token (Corrected method)
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            // 1. Get User Identity
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-            // Start building the query
-            IQueryable<ProjectTask> query = _context.Tasks;
+            // 2. Decide which Repository method to call
+            IEnumerable<ProjectTask> tasks;
 
-            
-            if (User.IsInRole("Admin") || User.IsInRole("Manager"))
+            if (projectId.HasValue)
             {
-                // No filter applied to the query.
-            }
-            else if (User.IsInRole("Member"))
-            {
-                query = query.Where(t => t.Project.ProjectUsers.Any(pu => pu.UserId == currentUserId));
+                // --- PROJECT PAGE VIEW ---
+                if (User.IsInRole("Admin") || User.IsInRole("Manager"))
+                {
+                    // Admins and Managers see everything in the project
+                    tasks = await _taskRepository.GetTasksByProjectId(projectId.Value);
+                }
+                else
+                {
+                    // Members see only what is assigned to them in this project
+                    tasks = await _taskRepository.GetUserTasksByProjectId(userId, projectId.Value);
+                }
             }
             else
             {
-                return Forbid("Access denied: Insufficient role permissions.");
+                // --- DASHBOARD VIEW ---
+                if (User.IsInRole("Admin"))
+                {
+                    tasks = await _taskRepository.GetAllTasksAsync();
+                }
+                else if (User.IsInRole("Manager"))
+                {
+                    // Managers see tasks from projects they created
+                    tasks = await _taskRepository.GetTasksByProjectManagerIdAsync(userId);
+                }
+                else
+                {
+                    // Members see all tasks assigned to them across all projects
+                    tasks = await _taskRepository.GetAssignedTasksAsync(userId);
+                }
             }
 
-            var taskDtos = await query
-                .Select(t => new TaskResponseDto // Use a projection to load only necessary fields
-                {
-                    Id = t.Id,
-                    Title = t.Title,
-                    Description = t.Description,
-                    Status = t.Status,
-                    Priority = t.Priority,
-                    DueDate = t.DueDate,
-                    CreatorId = t.CreatorId,
-                    ProjectId = t.ProjectId,
-                    // Map related data using navigation properties (EF performs the joins)
-                    ProjectName = t.Project.Name,
-                    AssignedUserName = t.AssignedUser.FirstName + " " + t.AssignedUser.LastName,
-                    AssignedUserId = t.AssignedUserId,
-
-                    // Example of mapping Tags
-                    Tags = t.TaskTags.Select(tt => tt.Tag.Name).ToList()
-                })
-                .ToListAsync();
+            // 3. One single mapping procedure for all results
+            var taskDtos = tasks.Select(t => new TaskResponseDto
+            {
+                Id = t.Id,
+                Title = t.Title,
+                Description = t.Description,
+                Status = t.Status,
+                Priority = t.Priority,
+                DueDate = t.DueDate,
+                CreatorId = t.CreatorId,
+                ProjectId = t.ProjectId,
+                ProjectName = t.Project.Name,
+                AssignedUserName = t.AssignedUser != null
+                    ? $"{t.AssignedUser.FirstName} {t.AssignedUser.LastName}"
+                    : "Unassigned",
+                AssignedUserId = t.AssignedUserId,
+                Tags = t.TaskTags.Select(tt => tt.Tag.Name).ToList()
+            }).ToList();
 
             return Ok(taskDtos);
         }
