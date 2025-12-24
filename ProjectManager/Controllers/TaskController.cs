@@ -91,6 +91,13 @@ namespace ProjectManager.Controllers
         {
             // 1. Get User Identity
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            Response.Headers.Add("X-Debug-ProjectId", projectId?.ToString() ?? "NULL");
+            Response.Headers.Add("X-Debug-User", userId ?? "NULL");
+            Response.Headers.Add("X-Debug-IsAdmin", User.IsInRole("Admin").ToString());
+            Response.Headers.Add("X-Debug-IsManager", User.IsInRole("Manager").ToString());
+            Response.Headers.Add("X-Debug-IsMember", User.IsInRole("Member").ToString());
+
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
             // 2. Decide which Repository method to call
