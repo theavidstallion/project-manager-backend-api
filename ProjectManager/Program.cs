@@ -5,12 +5,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ProjectManager.Data;
 using ProjectManager.Filters;
+using ProjectManager.Interfaces;
 using ProjectManager.Middleware;
 using ProjectManager.Models;
 using ProjectManager.Services; 
 using Serilog;
 using System.Security.Claims;
 using System.Text;
+using ProjectManager.Repositories;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -40,6 +42,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IProjectRepository, ProjectRespository>();
+builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 
 // 1b. Database & Identity
 // Pre 500.30 error

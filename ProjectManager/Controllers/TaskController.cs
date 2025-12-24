@@ -4,10 +4,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProjectManager.Data;
 using ProjectManager.DTOs;
+using ProjectManager.Interfaces;
 using ProjectManager.Models;
 using System.Data.Common;
 using System.Security.Claims;
-
 
 namespace ProjectManager.Controllers
 {
@@ -18,10 +18,14 @@ namespace ProjectManager.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
-        public TaskController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+        private readonly IProjectRepository _projectRepository;
+        private readonly ITaskRepository _taskRepository;
+        public TaskController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, ITaskRepository taskRepository, IProjectRepository projectRepository)
         {
             _context = context;
             _userManager = userManager;
+            _taskRepository = taskRepository;
+            _projectRepository = projectRepository;
         }
 
 
@@ -42,9 +46,7 @@ namespace ProjectManager.Controllers
             }
 
             var projectId = taskModel.ProjectId;
-            var project = await _context.Projects
-                .Include(p => p.ProjectUsers)
-                .FirstOrDefaultAsync(p => p.Id == projectId);
+            var project = await _projectRepository.GetProjectById(projectId);
 
             if (project == null)
             {
@@ -59,6 +61,7 @@ namespace ProjectManager.Controllers
                 }
             }
 
+            // Mapping DTO to Model
             var newTask = new ProjectTask
             {
                 Title = taskModel.Title,
@@ -71,24 +74,13 @@ namespace ProjectManager.Controllers
                 AssignedUserId = taskModel.AssignedUserId
             };
 
-            // Need to understand relationships and working with them more clearly
-            if (taskModel.TagIds != null && taskModel.TagIds.Count > 0)
+            var result = await _taskRepository.CreateTaskAsync(newTask, taskModel.TagIds);
+
+            if (result == null)
             {
-                var tags = await _context.Tags
-                    .Where(t => taskModel.TagIds.Contains(t.Id))
-                    .ToListAsync();
-                foreach (var tag in tags)
-                {
-                    newTask.TaskTags.Add(new TaskTag
-                    {
-                        TagId = tag.Id
-                    });
-                }
+                return StatusCode(500, "An error occurred while creating the task.");
             }
-
-            _context.Tasks.Add(newTask);
-            await _context.SaveChangesAsync();
-
+            
             return NoContent();
 
         }
