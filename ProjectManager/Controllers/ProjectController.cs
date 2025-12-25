@@ -31,20 +31,18 @@ namespace ProjectManager.Controllers
         [HttpGet]
         public async Task<IActionResult> GetProjects()
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            IEnumerable<Project> projects;
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // 1. ROLE-BASED FETCHING (The logic is now delegated)
-            if (User.IsInRole("Admin") || User.IsInRole("Manager"))
-            {
-                projects = await _projectRepository.GetAllProjectsAsync();
-            }
-            else
-            {
-                projects = await _projectRepository.GetProjectsByUserIdAsync(userId);
-            }
+            // 1. DECISION LOGIC: Determine what the SP needs
+            // If Admin/Manager, we send null (Get All).
+            // If Member, we send their ID (Filtered).
+            string? filterId = (User.IsInRole("Admin") || User.IsInRole("Manager"))
+                ? null
+                : currentUserId;
 
-            // 2. MAPPING (Entity -> DTO)
+            var projects = await _projectRepository.GetProjectsAsync(filterId);
+
+            // 2. MAPPING: Entity -> DTO
             var projectDtos = projects.Select(project => new ProjectResponseDto
             {
                 Id = project.Id,
@@ -54,7 +52,7 @@ namespace ProjectManager.Controllers
                 EndDate = project.EndDate,
                 Status = project.Status,
                 CreatorId = project.CreatorId,
-                CreatorName = project.Creator?.FirstName ?? "Unknown",
+                CreatorName = project.CreatorName,
 
                 Members = project.ProjectUsers.Select(pu => new ProjectMemberDto
                 {

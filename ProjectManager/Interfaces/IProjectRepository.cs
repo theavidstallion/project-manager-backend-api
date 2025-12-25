@@ -6,9 +6,8 @@ namespace ProjectManager.Interfaces
     {
         Task<Project?> GetProjectByIdAsync(int id);
 
-        Task<IEnumerable<Project>> GetProjectsByUserIdAsync(string userId);
+        Task<IEnumerable<Project>> GetProjectsAsync(string? userId);
 
-        Task<IEnumerable<Project>> GetAllProjectsAsync();
 
     }
 }

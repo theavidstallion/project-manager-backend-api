@@ -13,30 +13,34 @@ namespace ProjectManager.Repositories
             _context = context;
         }
 
-        // Base handler
-        private IQueryable<Project> GetBaseProjectQuery()
+        public async Task<IEnumerable<Project>> GetProjectsAsync(string? userId)
         {
-            return _context.Projects
-                .Include(p => p.Creator)    // Can ignore, as we have CreatorId and name as explicit fields
-                .Include(p => p.ProjectUsers)
-                    .ThenInclude(pu => pu.User);
-        }
-
-        public async Task<IEnumerable<Project>> GetAllProjectsAsync()
-        {
-            return await GetBaseProjectQuery().ToListAsync();
-        }
-
-        public async Task<IEnumerable<Project>> GetProjectsByUserIdAsync(string userId)
-        {
-            return await GetBaseProjectQuery()
-                .Where(p => p.ProjectUsers.Any(pu => pu.UserId == userId))
+            // 1. Execute the Stored Procedure (The "Gatekeeper") - It filters projects
+            // Can't use Include() with FromSqlInterpolated() or whatever the heck was the reason, so we do it in two steps.
+            var projects = await _context.Projects
+                .FromSqlInterpolated($"EXEC dbo.spGetProjects @UserId = {userId}")
                 .ToListAsync();
+
+            if (!projects.Any()) return projects;
+
+            // 2. Fetch the Members
+            // We only fetch members for the specific projects returned by the SP.
+            var projectIds = projects.Select(p => p.Id).ToList();
+
+            await _context.ProjectUsers
+                .Include(pu => pu.User)
+                .Where(pu => projectIds.Contains(pu.ProjectId))
+                .LoadAsync(); // This "snaps" the users into the project objects in RAM
+
+            return projects;
         }
+
 
         public async Task<Project?> GetProjectByIdAsync(int id)
         {
-            return await GetBaseProjectQuery()
+            return await _context.Projects
+                .Include(p => p.ProjectUsers)
+                    .ThenInclude(pu => pu.User)
                 .FirstOrDefaultAsync(p => p.Id == id);
         }
 

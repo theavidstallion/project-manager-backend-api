@@ -13,15 +13,51 @@ namespace ProjectManager.Repositories
             _context = context;
         }
 
-        // Helper method to avoid repeating Include logic for every method
-        private IQueryable<ProjectTask> GetBaseTaskQuery()
+        // "Relationship FIX-UP" HELPER 
+        private async Task PopulateTaskDataAsync(List<ProjectTask> tasks)
         {
-            return _context.Tasks
-                .Include(t => t.Project)
-                .Include(t => t.AssignedUser)
-                .Include(t => t.TaskTags)
-                    .ThenInclude(tt => tt.Tag);
+            if (!tasks.Any()) return;
+
+            var taskIds = tasks.Select(t => t.Id).ToList();
+
+            // 1. Load Projects (So we know which project the task belongs to)
+            var projectIds = tasks.Select(t => t.ProjectId).Distinct().ToList();
+            await _context.Projects.Where(p => projectIds.Contains(p.Id)).LoadAsync();
+
+            // 2. Load Assigned Users (So we see names/emails)
+            var userIds = tasks.Select(t => t.AssignedUserId).Distinct().ToList();
+            await _context.Users.Where(u => userIds.Contains(u.Id)).LoadAsync();
+
+            // 3. Load Tags (Many-to-Many)
+            await _context.TaskTags
+                .Include(tt => tt.Tag)
+                .Where(tt => taskIds.Contains(tt.TaskId))
+                .LoadAsync();
         }
+
+        public async Task<IEnumerable<ProjectTask>> GetDashboardTasksAsync(string? userId)
+        {
+            var tasks = await _context.Tasks
+                .FromSqlInterpolated($"EXEC dbo.spGetDashboardTasks @UserId = {userId}")
+                .ToListAsync();
+
+            await PopulateTaskDataAsync(tasks);
+            return tasks;
+        }
+
+        public async Task<IEnumerable<ProjectTask>> GetProjectTasksAsync(int? projectId, string? userId)
+        {
+            var tasks = await _context.Tasks
+                .FromSqlInterpolated($"EXEC dbo.spGetProjectTasks @ProjectId = {projectId}, @UserId = {userId}")
+                .ToListAsync();
+
+            await PopulateTaskDataAsync(tasks);
+            return tasks;
+        }
+
+        
+        //-------------------------------------------------
+
 
         public async Task<ProjectTask> CreateTaskAsync(ProjectTask task, List<int> tagIds)
         {
@@ -49,53 +85,13 @@ namespace ProjectManager.Repositories
         }
 
         //-------------------------------------------------
-        // TASKS ON DASHBOARD
-        // For admins on dashboard
-        public async Task<IEnumerable<ProjectTask>> GetAllTasksAsync()
-        {
-            return await GetBaseTaskQuery()
-                .ToListAsync();
-        }
-        // For project managers on dashboard
-        public async Task<IEnumerable<ProjectTask>> GetTasksByProjectManagerIdAsync(string creatorId)
-        {
-            return await GetBaseTaskQuery()
-                .Where(t => t.Project.CreatorId == creatorId)
-                .ToListAsync();
-        }
-        // Get all tasks for a specific user on dashboard
-        public async Task<IEnumerable<ProjectTask>> GetAssignedTasksAsync (string userId)
-        {
-            return await GetBaseTaskQuery()
-                .Where(t => t.AssignedUserId == userId)
-                .ToListAsync();
-        }
-        //-------------------------------------------------
-
-
-        //-------------------------------------------------
-        // TASKS INSIDE A PROJECT PAGE
-        // For admins and project managers inside a project page
-        public async Task<IEnumerable<ProjectTask>> GetTasksByProjectId(int projectId)
-        {
-            return await GetBaseTaskQuery()
-                .Where(t => t.ProjectId == projectId)
-                .ToListAsync();
-        }
-        // For members inside a project page
-        public async Task<IEnumerable<ProjectTask>> GetUserTasksByProjectId(string userId, int projectId)
-        {
-            return await GetBaseTaskQuery()
-                .Where(t => t.AssignedUserId == userId && t.ProjectId == projectId)
-                .ToListAsync();
-        }
-        //-------------------------------------------------
+        
 
 
         // Get task by ID
         public async Task<ProjectTask?> GetTaskByIdAsync(int id)
         {
-            return await GetBaseTaskQuery().FirstOrDefaultAsync(t => t.Id == id);
+            return await _context.Tasks.FirstOrDefaultAsync(t => t.Id == id);
         }
 
 
