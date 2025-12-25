@@ -98,5 +98,77 @@ namespace ProjectManager.Repositories
             return await GetBaseTaskQuery().FirstOrDefaultAsync(t => t.Id == id);
         }
 
+
+        // Assign task to user
+        public async Task<bool> AssignTaskToUserAsync (ProjectTask task, string newUserId)
+        {
+            task.AssignedUserId = newUserId;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+
+        // Delete task
+        public async Task<bool> DeleteTaskAsync(int taskId)
+        {
+            var task = await _context.Tasks.FindAsync(taskId);
+            if (task == null)
+            {
+                return false;
+            }
+            _context.Tasks.Remove(task);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+
+        // Update task status
+        public async Task<bool> UpdateTaskStatusAsync(ProjectTask task, string newStatus)
+        {
+            if (task == null)
+            {
+                return false;
+            }
+            task.Status = newStatus;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+
+        // Update task
+        public async Task<bool> UpdateTaskAsync(ProjectTask task, List<int> newTagIds)
+        {
+            // Handle Tag Synchronization (Stupid complex many-to-many relationships in EF Core - need practice)
+            if (newTagIds != null)
+            {
+                // Find links that exist in DB but aren't in the new list (Remove these)
+                var tagsToRemove = task.TaskTags
+                    .Where(tt => !newTagIds.Contains(tt.TagId))
+                    .ToList();
+
+                if (tagsToRemove.Any())
+                {
+                    _context.TaskTags.RemoveRange(tagsToRemove);
+                }
+
+                // Find IDs in the new list that don't have links yet (Add these)
+                var existingTagIds = task.TaskTags.Select(tt => tt.TagId).ToHashSet();
+                var tagsToAdd = newTagIds
+                    .Where(id => !existingTagIds.Contains(id))
+                    .Select(id => new TaskTag { TaskId = task.Id, TagId = id })
+                    .ToList();
+
+                if (tagsToAdd.Any())
+                {
+                    await _context.TaskTags.AddRangeAsync(tagsToAdd);
+                }
+            }
+
+            // 2. Save the whole transaction (automatically handles both scalar updates and many-to-many changes due to EF Core tracking)
+            return await _context.SaveChangesAsync() >= 0;
+        }
+
+
+
     }
 }

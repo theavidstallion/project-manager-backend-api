@@ -2,6 +2,6 @@
 {
     public class AddTagsDto
     {
-        public List<int>? TagIds { get; set; }
+        public List<int?>? TagIds { get; set; }
     }
 }

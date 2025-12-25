@@ -25,9 +25,16 @@ namespace ProjectManager.Interfaces
         // Tasks inside Project page for members 
         Task<IEnumerable<ProjectTask>> GetUserTasksByProjectId(string userId, int projectId);
 
+        // Assign task to user
+        Task<bool> AssignTaskToUserAsync(ProjectTask task, string newUserId);
 
         //Task<ProjectTask> UpdateTaskAsync(ProjectTask task);
-        //Task<bool> DeleteTaskAsync(int id);
+        Task<bool> DeleteTaskAsync(int taskId);
+
+        Task<bool> UpdateTaskStatusAsync(ProjectTask task, string newStatus);
+
+        Task<bool> UpdateTaskAsync(ProjectTask task, List<int> tagIds);
+
 
     }
 }

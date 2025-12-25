@@ -16,13 +16,11 @@ namespace ProjectManager.Controllers
     [Route("api/[controller]")]
     public class TaskController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IProjectRepository _projectRepository;
         private readonly ITaskRepository _taskRepository;
-        public TaskController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, ITaskRepository taskRepository, IProjectRepository projectRepository)
+        public TaskController(UserManager<ApplicationUser> userManager, ITaskRepository taskRepository, IProjectRepository projectRepository)
         {
-            _context = context;
             _userManager = userManager;
             _taskRepository = taskRepository;
             _projectRepository = projectRepository;
@@ -153,41 +151,45 @@ namespace ProjectManager.Controllers
         }
 
 
-        // ------------------------------------------------------------------
-
         // Get Task by ID
         [HttpGet("{id}")] // Route: GET api/Task/{id}
         public async Task<IActionResult> GetTaskById(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            IQueryable<ProjectTask> query = _context.Tasks;
+            var task = await _taskRepository.GetTaskByIdAsync(id);
 
+
+            if (task == null)
+            {
+                return NotFound("Task not found.");
+            }
             if (User.IsInRole("Admin") || User.IsInRole("Manager"))
             {
 
             }
             if (User.IsInRole("Member"))
             {
-                query = query.Where(t => t.AssignedUserId == userId);
+                if (task.AssignedUserId != userId)
+                {
+                    return StatusCode(403, new { message = "Members can only access tasks assigned to them." });
+                }
             }
 
-            var taskDto = await query
-                .Where(t => t.Id == id)
-                .Select(t => new TaskResponseDto
+            var taskDto = new TaskResponseDto
                 {
-                    Id = t.Id,
-                    Title = t.Title,
-                    Description = t.Description,
-                    DueDate = t.DueDate,
-                    Priority = t.Priority,
-                    Status = t.Status,
-                    CreatorId = t.CreatorId,
-                    ProjectId = t.ProjectId,
-                    ProjectName = t.Project.Name,
-                    AssignedUserId = t.AssignedUserId,
-                    AssignedUserName = t.AssignedUser.FirstName + " " + t.AssignedUser.LastName,
-                    Tags = t.TaskTags.Select(tt => tt.Tag.Name).ToList()
-                }).FirstOrDefaultAsync();
+                    Id = task.Id,
+                    Title = task.Title,
+                    Description = task.Description,
+                    DueDate = task.DueDate,
+                    Priority = task.Priority,
+                    Status = task.Status,
+                    CreatorId = task.CreatorId,
+                    ProjectId = task.ProjectId,
+                    ProjectName = task.Project.Name,
+                    AssignedUserId = task.AssignedUserId,
+                    AssignedUserName = task.AssignedUser.FirstName + " " + task.AssignedUser.LastName,
+                    Tags = task.TaskTags.Select(tt => tt.Tag.Name).ToList()
+                };
 
             if (taskDto == null)
             {
@@ -203,9 +205,7 @@ namespace ProjectManager.Controllers
         [HttpPost("{id}/assign")] // Route: PUT /api/Task/{id}/assign
         public async Task<IActionResult> AssignUserToTask(int id, [FromBody] TaskAssignDto model)
         {
-            var task = await _context.Tasks
-                .Include(t => t.Project)
-                .FirstOrDefaultAsync(t => t.Id == id);
+            var task = await _taskRepository.GetTaskByIdAsync(id);
 
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -239,19 +239,22 @@ namespace ProjectManager.Controllers
                 return StatusCode(403, new { message = "Access denied: Insufficient role permissions." });
             }
             // Perform Re-assignment
-            task.AssignedUserId = model.NewAssignedUserId;
-            await _context.SaveChangesAsync();
-            return NoContent();
+            var result = await _taskRepository.AssignTaskToUserAsync(task, model.NewAssignedUserId);
+            if (result)
+            {
+                return NoContent();
+            }
+
+            return StatusCode(500, "An error occurred while re-assigning the task.");
 
         }
-
 
         // Delete Task by ID
         [Authorize(Roles = "Admin, Manager")]
         [HttpDelete("{id}")] // Route: DELETE /api/Task/{id}
         public async Task<IActionResult> DeleteTask(int id)
         {
-            var task = await _context.Tasks.FindAsync(id);
+            var task = await _taskRepository.GetTaskByIdAsync(id);
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (task == null)
             {
@@ -281,175 +284,62 @@ namespace ProjectManager.Controllers
                 // Should be caught by [Authorize], but as a final safeguard:
                 return StatusCode(403);
             }
-            _context.Tasks.Remove(task);
-            await _context.SaveChangesAsync();
-            // NOTE: Returning NoContent() (204) is the standard for successful DELETE.
+
+            var result = await _taskRepository.DeleteTaskAsync(id);
+            if (!result)
+            {
+                return StatusCode(500, "An error occurred while deleting the task.");
+            }
+            
             return NoContent();
         }
 
 
-        // Update Task by ID, including Tags
+
+        // Update Task by ID, Tags are also updated here - collectively and independently. (Maybe change later)
         // Admins, Managers of the Project, and Assigned Members can update tasks.
-        [HttpPut("{id}")] // Route: PUT /api/Task/{id}
+        [HttpPut("{id}")]
         public async Task<IActionResult> UpdateTask(int id, [FromBody] UpdateTaskDto taskModel)
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // 1. Fetch Task and Project for Authorization Check
-            var task = await _context.Tasks
-                .Include(t => t.Project)  // Need Project to check Manager ownership
-                .Include(t => t.TaskTags) // Include existing tags
-                .FirstOrDefaultAsync(t => t.Id == id);
+            // 1. Fetch Task
+            var task = await _taskRepository.GetTaskByIdAsync(id);
+            if (task == null) return NotFound(new { Message = "Task not found." });
 
-            if (task == null)
+            // 2. Authorization (Gatekeeper)
+            if (User.IsInRole("Member") && currentUserId != task.AssignedUserId)
             {
-                return NotFound(new { Message = "Task not found." });
+                return StatusCode(403, new { message = "Unauthorized." });
+            }
+            if (User.IsInRole("Manager") && !User.IsInRole("Admin") && task.Project?.CreatorId != currentUserId)
+            {
+                return StatusCode(403, new { message = "Unauthorized." });
             }
 
-            if (User.IsInRole("Member"))
-            {
-                if (currentUserId != task.AssignedUserId)
-                {
-                    return StatusCode(403, new { message = "Members who are not assigned users are not authorized to update tasks." });
-                } 
-            }
-            // 2. AUTHORIZATION CHECK (Admin/Manager)
-
-            // Only check ownership if the user is a Manager AND NOT an Admin.
-            if (User.IsInRole("Manager") && !User.IsInRole("Admin"))
-            {
-                // Check if the Manager is the Creator/Manager of the PROJECT this task belongs to.
-                if (task.Project.CreatorId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Managers can only update tasks within projects they manage." });
-                }
-            }
-
-            // 3. Update Core Task Properties
-
-            // We explicitly exclude AssignedUserId and Status from this action.
+            // 3. Map DTO to Entity
+            // We update the properties on the 'task' object we already have in memory
             task.Title = taskModel.Title;
             task.Description = taskModel.Description;
             task.Priority = taskModel.Priority;
             task.DueDate = taskModel.DueDate;
-            task.Status = taskModel.Status;       
+            task.Status = taskModel.Status;
 
-            // 4. Update Tags (FIXED ARRAY MANIPULATION)
-            if (taskModel.TagIds != null)
-            {
-                // REMOVE EXISTING TAGS: Find all link entities to remove
-                var tagsToRemove = task.TaskTags
-                    .Where(tt => !taskModel.TagIds.Contains(tt.TagId))
-                    .ToList(); // Materialize the list for removal
+            // 4. Delegate the "Scary" logic and the Database Save to the Repo
+            var success = await _taskRepository.UpdateTaskAsync(task, taskModel.TagIds);
 
-                foreach (var tagLink in tagsToRemove)
-                {
-                    task.TaskTags.Remove(tagLink);
-                }
+            if (!success) return StatusCode(500, "Update failed.");
 
-                // ADD NEW TAGS
-                var existingTagIds = task.TaskTags.Select(tt => tt.TagId).ToHashSet();
-                var newTagIds = taskModel.TagIds.Where(tagId => !existingTagIds.Contains(tagId)).ToList();
-
-                foreach (var tagId in newTagIds)
-                {
-                    task.TaskTags.Add(new TaskTag { TagId = tagId });
-                }
-            }
-
-            // 5. Save Changes
-            await _context.SaveChangesAsync();
             return NoContent();
         }
 
-
-        // Change Task Status for Member role
-        [HttpPut("{id}/status")] // Route: PUT /api/Task/{id}/status
-        public async Task<IActionResult> ChangeTaskStatus(int id, [FromBody] ChangeTaskStatusDto statusDto)
-        {
-            var task = await _context.Tasks.FindAsync(id);
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (task == null)
-            {
-                return NotFound(new { Message = "Task not found." });
-            }
-            // Authorization: Members can only change status of tasks assigned to them
-            if (User.IsInRole("Member"))
-            {
-                if (task.AssignedUserId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Members can only change status of tasks assigned to them." } );
-                }
-            }
-            else if (User.IsInRole("Admin") || User.IsInRole("Manager"))
-            {
-                // Admins and Managers can change status of any task
-            }
-            else
-            {
-                return StatusCode(403, new { message = "Access denied: Insufficient role permissions." } );
-            }
-            task.Status = statusDto.NewStatus;
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
-
-        // Add Tags to Task for Member role
-        [HttpPost("{id}/tags")] // Route: POST /api/Task/{id}/tags
-        public async Task<IActionResult> AddTagsToTask(int id, [FromBody] AddTagsDto tagsDto)
-        {
-            var task = await _context.Tasks
-                .Include(t => t.TaskTags)
-                .FirstOrDefaultAsync(t => t.Id == id);
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (task == null)
-            {
-                return NotFound(new { Message = "Task not found." });
-            }
-            // Authorization: Members can only add tags to tasks assigned to them
-            if (User.IsInRole("Member"))
-            {
-                if (task.AssignedUserId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Members can only add tags to tasks assigned to them." } );
-                }
-            }
-            else if (User.IsInRole("Admin"))
-            {
-                // Admins and Managers can add tags to any task
-            }
-            else if (User.IsInRole("Manager"))
-            {
-                // Managers can add tags only if they manage the project
-                var project = await _context.Projects.FindAsync(task.ProjectId);
-                if (project.CreatorId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Managers can only add tags to tasks within projects they manage." } );
-                }
-            }
-            else
-            {
-                return StatusCode(403, new { message = "Access denied: Insufficient role permissions." });
-            }
-            // Add new tags, avoiding duplicates
-            var existingTagIds = task.TaskTags.Select(tt => tt.TagId).ToHashSet();
-            foreach (var tagId in tagsDto.TagIds)
-            {
-                if (!existingTagIds.Contains(tagId))
-                {
-                    task.TaskTags.Add(new TaskTag { TagId = tagId });
-                }
-            }
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
 
         // Update Task Status for member role only
         [Authorize]
-        [HttpPut("{id}/member/status")] // Route: PUT /api/Task/{id}/member/status
+        [HttpPut("{id}/status")] // Route: PUT /api/Task/{id}/status
         public async Task<IActionResult> UpdateTaskStatusByMember(int id, [FromBody] ChangeTaskStatusDto statusDto)
         {
-            var task = await _context.Tasks.FindAsync(id);
+            var task = await _taskRepository.GetTaskByIdAsync(id);
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (task == null)
             {
@@ -467,10 +357,17 @@ namespace ProjectManager.Controllers
             {
                 return StatusCode(403, new { message = "Access denied: Insufficient role permissions." } );
             }
-            task.Status = statusDto.NewStatus;
-            await _context.SaveChangesAsync();
+
+            // Update status
+            var result = await _taskRepository.UpdateTaskStatusAsync(task, statusDto.NewStatus);
+            if (!result)
+            {
+                return StatusCode(500, "An error occurred while updating the task status.");
+            }
             return NoContent();
         }
+
+        // ------------------------------------------------------------------
 
 
 
