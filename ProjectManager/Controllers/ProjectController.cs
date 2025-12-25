@@ -6,6 +6,7 @@ using ProjectManager.Data;
 using ProjectManager.DTOs;
 using ProjectManager.Models;
 using System.Security.Claims;
+using ProjectManager.Interfaces;
 
 namespace ProjectManager.Controllers
 {
@@ -16,46 +17,35 @@ namespace ProjectManager.Controllers
     {
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ApplicationDbContext _context;
+        private readonly IProjectRepository _projectRepository;
 
-        public ProjectController(UserManager<ApplicationUser> userManager, ApplicationDbContext context)
+        public ProjectController(UserManager<ApplicationUser> userManager, ApplicationDbContext context, IProjectRepository projectRepository)
         {
             _userManager = userManager;
             _context = context;
+            _projectRepository = projectRepository;
         }
 
-        
+
         // Route: GET api/Project
         [HttpGet]
-        public async Task<IActionResult> GetProjectsAsync()
+        public async Task<IActionResult> GetProjects()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            IEnumerable<Project> projects;
 
-            // query simply has all projects initially
-            IQueryable<Project> query = _context.Projects;
-
-            // All projects remain selected for admins and managers
+            // 1. ROLE-BASED FETCHING (The logic is now delegated)
             if (User.IsInRole("Admin") || User.IsInRole("Manager"))
             {
-                query = query;
+                projects = await _projectRepository.GetAllProjectsAsync();
             }
-            // For Members, filtering to only projects they are part of
             else
             {
-                query = query
-                    .Where(p => p.ProjectUsers.Any(pu => pu.UserId == userId));
+                projects = await _projectRepository.GetProjectsByUserIdAsync(userId);
             }
 
-
-            // Eager loading all data needed for the DTO to respond to request
-            var projectsWithData = await query
-                .Include(p => p.Creator) // Eager load creator details
-                .Include(p => p.ProjectUsers)
-                    .ThenInclude(pu => pu.User) // Eager load users
-                .ToListAsync();
-
-
-            // Preparing data for response by mapping to DTOs
-            var projectDtos = projectsWithData.Select(project => new ProjectResponseDto
+            // 2. MAPPING (Entity -> DTO)
+            var projectDtos = projects.Select(project => new ProjectResponseDto
             {
                 Id = project.Id,
                 Name = project.Name,
@@ -64,15 +54,15 @@ namespace ProjectManager.Controllers
                 EndDate = project.EndDate,
                 Status = project.Status,
                 CreatorId = project.CreatorId,
-                CreatorName = project.Creator.FirstName, // Assuming you only need FirstName for the Creator
+                CreatorName = project.Creator?.FirstName ?? "Unknown",
 
                 Members = project.ProjectUsers.Select(pu => new ProjectMemberDto
                 {
                     UserId = pu.UserId,
-                    FirstName = pu.User.FirstName,
-                    LastName = pu.User.LastName,
-                    Email = pu.User.Email
-                }).ToList()                             // Used two ToList() calls to use both the member dto and the project response dto
+                    FirstName = pu.User?.FirstName,
+                    LastName = pu.User?.LastName,
+                    Email = pu.User?.Email
+                }).ToList()
             }).ToList();
 
             return Ok(projectDtos);

@@ -44,7 +44,7 @@ namespace ProjectManager.Controllers
             }
 
             var projectId = taskModel.ProjectId;
-            var project = await _projectRepository.GetProjectById(projectId);
+            var project = await _projectRepository.GetProjectByIdAsync(projectId);
 
             if (project == null)
             {

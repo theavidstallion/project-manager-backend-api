@@ -4,6 +4,11 @@ namespace ProjectManager.Interfaces
 {
     public interface IProjectRepository
     {
-        Task<Project?> GetProjectById(int id);
+        Task<Project?> GetProjectByIdAsync(int id);
+
+        Task<IEnumerable<Project>> GetProjectsByUserIdAsync(string userId);
+
+        Task<IEnumerable<Project>> GetAllProjectsAsync();
+
     }
 }
