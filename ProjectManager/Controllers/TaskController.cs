@@ -109,31 +109,35 @@ namespace ProjectManager.Controllers
         }
 
 
-        [HttpGet]
-        public async Task<IActionResult> GetDashboardTasks([FromQuery] int? projectId)
+        [HttpGet] // Route: GET api/Task
+        public async Task<IActionResult> GetTasks([FromQuery] int? projectId)
         {
-            // 1. Only Admins get the "God Mode" (null). 
-            // Managers and Members must send their ID to be filtered.
-            string? filterId = User.IsInRole("Admin")
-                ? null
-                : User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            IEnumerable<ProjectTask> tasks;
-
-            // 2. Decide which SP to call
             if (!projectId.HasValue)
             {
-                // Dashboard: Use the dashboard SP logic
-                tasks = await _taskRepository.GetDashboardTasksAsync(filterId);
+                // --- DASHBOARD LOGIC ---
+                // Admin: null (Sees all)
+                // Manager: ID (Sees only tasks they manage/created via SP logic)
+                // Member: ID (Sees assigned)
+                string? filterId = User.IsInRole("Admin") ? null : currentUserId;
+
+                var tasks = await _taskRepository.GetDashboardTasksAsync(filterId);
+                return Ok(MapToDto(tasks));
             }
             else
             {
-                // Project Page: Use the project-specific SP logic
-                tasks = await _taskRepository.GetProjectTasksAsync(projectId.Value, filterId);
-            }
+                // --- PROJECT PAGE LOGIC ---
+                // Admin: null (Sees all)
+                // Manager: null (User wants them to see ALL tasks inside the project page)
+                // Member: ID (Sees only their tasks)
+                string? filterId = (User.IsInRole("Admin") || User.IsInRole("Manager"))
+                    ? null
+                    : currentUserId;
 
-            // 3. Map to DTO once at the end
-            return Ok(MapToDto(tasks));
+                var tasks = await _taskRepository.GetProjectTasksAsync(projectId.Value, filterId);
+                return Ok(MapToDto(tasks));
+            }
         }
 
 
