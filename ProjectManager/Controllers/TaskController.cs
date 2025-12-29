@@ -289,28 +289,21 @@ namespace ProjectManager.Controllers
 
 
 
-        // Update Task by ID, Tags are also updated here - collectively and independently. (Maybe change later)
+        // Update basic Task details
         // Admins, Managers of the Project, and Assigned Members can update tasks.
         [HttpPut("{id}")] // Route: PUT /api/Task/{id}
         public async Task<IActionResult> UpdateTask(int id, [FromBody] UpdateTaskDto taskModel)
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // 1. Fetch Task
+            // Fetch Task
             var task = await _taskRepository.GetTaskByIdAsync(id);
             if (task == null) return NotFound(new { Message = "Task not found." });
 
-            // 2. Authorization (Gatekeeper)
-            if (User.IsInRole("Member") && currentUserId != task.AssignedUserId)
-            {
-                return StatusCode(403, new { message = "You must be the assigned user to update this task." });
-            }
-            if (User.IsInRole("Manager") && !User.IsInRole("Admin") && task.Project?.CreatorId != currentUserId)
-            {
-                return StatusCode(403, new { message = "Only the project manager or assigned user can update the task." });
-            }
+            // Authorization (Gatekeeper)
+            if (!CanUserModifyTask(task)) return StatusCode(403, "Unauthorized");
 
-            // 3. Map DTO to Entity
+            // Map DTO to Entity
             // We update the properties on the 'task' object we already have in memory
             task.Title = taskModel.Title;
             task.Description = taskModel.Description;
@@ -318,13 +311,42 @@ namespace ProjectManager.Controllers
             task.DueDate = taskModel.DueDate;
             task.Status = taskModel.Status;
 
-            // 4. Delegate the "Scary" logic and the Database Save to the Repo
-            var success = await _taskRepository.UpdateTaskAsync(task, taskModel.TagIds);
+            var success = await _taskRepository.UpdateTaskAsync(task);
 
             if (!success) return StatusCode(500, "Update failed.");
 
             return NoContent();
         }
+
+
+        // Update Task Tags
+        // PUT: api/Task/5/tags (Tags Only)
+        [Authorize]
+        [HttpPut("{id}/tags")]
+        public async Task<IActionResult> UpdateTaskTags(int id, [FromBody] List<int> tagIds)
+        {
+            var task = await _taskRepository.GetTaskByIdAsync(id);
+            if (task == null) return NotFound();
+
+            // AUTH CHECK
+            if (!CanUserModifyTask(task)) return StatusCode(403, "Unauthorized");
+
+            var success = await _taskRepository.UpdateTaskTagsAsync(id, tagIds);
+            return success ? NoContent() : StatusCode(500);
+        }
+
+
+        // Helper method for authorization
+        private bool CanUserModifyTask(ProjectTask task)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (User.IsInRole("Admin")) return true;
+            if (User.IsInRole("Manager") && task.Project?.CreatorId == userId) return true;
+            if (User.IsInRole("Member") && task.AssignedUserId == userId) return true;
+            return false;
+        }
+
+
 
 
         // Update Task Status for member role only
@@ -339,17 +361,7 @@ namespace ProjectManager.Controllers
                 return NotFound(new { Message = "Task not found." });
             }
             // Authorization: Members can only change status of tasks assigned to them
-            if (User.IsInRole("Member"))
-            {
-                if (task.AssignedUserId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Members can only change status of tasks assigned to them." } );
-                }
-            }
-            else
-            {
-                return StatusCode(403, new { message = "Access denied: Insufficient role permissions." } );
-            }
+            if (!CanUserModifyTask(task)) return StatusCode(403, "Unauthorized");
 
             // Update status
             var result = await _taskRepository.UpdateTaskStatusAsync(task, statusDto.NewStatus);

@@ -8,7 +8,5 @@
         public DateTime DueDate { get; set; }
         public string Status { get; set; } // To Do / In Progress / Done
 
-        public List<int>? TagIds { get; set; }
-
     }
 }

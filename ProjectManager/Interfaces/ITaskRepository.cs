@@ -23,7 +23,9 @@ namespace ProjectManager.Interfaces
 
         Task<bool> UpdateTaskStatusAsync(ProjectTask task, string newStatus);
 
-        Task<bool> UpdateTaskAsync(ProjectTask task, List<int> tagIds);
+        Task<bool> UpdateTaskAsync(ProjectTask task);
+
+        Task<bool> UpdateTaskTagsAsync(int taskId, List<int> tagIds);
 
 
     }
