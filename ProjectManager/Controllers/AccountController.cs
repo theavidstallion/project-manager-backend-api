@@ -198,6 +198,24 @@ namespace ProjectManager.Controllers
             user.FirstName = model.FirstName;
             user.LastName = model.LastName;
             user.PhoneNumber = model.PhoneNumber;
+            // Check current password before allowing password change
+            if (!string.IsNullOrEmpty(model.NewPassword))
+            {
+                var passwordCheck = await _userManager.CheckPasswordAsync(user, model.CurrentPassword);
+                if (!passwordCheck)
+                {
+                    return BadRequest("Current password is incorrect.");
+                }
+                var passwordChangeResult = await _userManager.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword);
+                if (passwordChangeResult.Succeeded)
+                {
+                    // Password changed successfully
+                }
+                else
+                {
+                    return BadRequest(passwordChangeResult.Errors);
+                }
+            }
 
             var result = await _userManager.UpdateAsync(user);
 
