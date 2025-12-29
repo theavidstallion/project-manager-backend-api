@@ -20,15 +20,15 @@ namespace ProjectManager.Repositories
 
             var taskIds = tasks.Select(t => t.Id).ToList();
 
-            // 1. Load Projects (So we know which project the task belongs to)
+            // Load Projects (to know which project the task belongs to)
             var projectIds = tasks.Select(t => t.ProjectId).Distinct().ToList();
             await _context.Projects.Where(p => projectIds.Contains(p.Id)).LoadAsync();
 
-            // 2. Load Assigned Users (So we see names/emails)
+            // Load Assigned Users
             var userIds = tasks.Select(t => t.AssignedUserId).Distinct().ToList();
             await _context.Users.Where(u => userIds.Contains(u.Id)).LoadAsync();
 
-            // 3. Load Tags (Many-to-Many)
+            // Load Tags (Many-to-Many)
             await _context.TaskTags
                 .Include(tt => tt.Tag)
                 .Where(tt => taskIds.Contains(tt.TaskId))
@@ -91,7 +91,7 @@ namespace ProjectManager.Repositories
         // Get task by ID
         public async Task<ProjectTask?> GetTaskByIdAsync(int id)
         {
-            return await _context.Tasks.FirstOrDefaultAsync(t => t.Id == id);
+            return await _context.Tasks.Include(t => t.Project).FirstOrDefaultAsync(t => t.Id == id);
         }
 
 
@@ -137,7 +137,7 @@ namespace ProjectManager.Repositories
             // Handle Tag Synchronization (Stupid complex many-to-many relationships in EF Core - need practice)
             if (newTagIds != null)
             {
-                // Find links that exist in DB but aren't in the new list (Remove these)
+                // Find links that exist in DB but aren't in the new list (need to remove them)
                 var tagsToRemove = task.TaskTags
                     .Where(tt => !newTagIds.Contains(tt.TagId))
                     .ToList();
@@ -160,7 +160,7 @@ namespace ProjectManager.Repositories
                 }
             }
 
-            // 2. Save the whole transaction (automatically handles both scalar updates and many-to-many changes due to EF Core tracking)
+            // Save the whole transaction (automatically handles both scalar updates and many-to-many changes due to EF Core tracking)
             return await _context.SaveChangesAsync() >= 0;
         }
 

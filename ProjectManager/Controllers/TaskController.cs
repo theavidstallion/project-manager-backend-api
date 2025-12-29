@@ -86,7 +86,7 @@ namespace ProjectManager.Controllers
 
         // --------------------------------------------------------------
 
-        // --- "MapToDto" HELPER ---
+        // --- "MapToDto" HELPER (Need to get into mapping things) ---
         private List<TaskResponseDto> MapToDto(IEnumerable<ProjectTask> tasks)
         {
             return tasks.Select(t => new TaskResponseDto
@@ -98,9 +98,9 @@ namespace ProjectManager.Controllers
                 Priority = t.Priority,
                 DueDate = t.DueDate,
                 ProjectId = t.ProjectId,
-                ProjectName = t.Project?.Name, // Snapped in via LoadAsync
+                ProjectName = t.Project?.Name,
                 AssignedUserId = t.AssignedUserId,
-                AssignedUserName = t.AssignedUser?.FirstName, // Snapped in via LoadAsync
+                AssignedUserName = t.AssignedUser?.FirstName,
 
                 Tags = t.TaskTags
                     .Select(tt => tt.Tag.Name)
@@ -129,7 +129,7 @@ namespace ProjectManager.Controllers
             {
                 // --- PROJECT PAGE LOGIC ---
                 // Admin: null (Sees all)
-                // Manager: null (User wants them to see ALL tasks inside the project page)
+                // Manager: null (See ALL tasks inside the project page)
                 // Member: ID (Sees only their tasks)
                 string? filterId = (User.IsInRole("Admin") || User.IsInRole("Manager"))
                     ? null
@@ -291,7 +291,7 @@ namespace ProjectManager.Controllers
 
         // Update Task by ID, Tags are also updated here - collectively and independently. (Maybe change later)
         // Admins, Managers of the Project, and Assigned Members can update tasks.
-        [HttpPut("{id}")]
+        [HttpPut("{id}")] // Route: PUT /api/Task/{id}
         public async Task<IActionResult> UpdateTask(int id, [FromBody] UpdateTaskDto taskModel)
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -303,11 +303,11 @@ namespace ProjectManager.Controllers
             // 2. Authorization (Gatekeeper)
             if (User.IsInRole("Member") && currentUserId != task.AssignedUserId)
             {
-                return StatusCode(403, new { message = "Unauthorized." });
+                return StatusCode(403, new { message = "You must be the assigned user to update this task." });
             }
             if (User.IsInRole("Manager") && !User.IsInRole("Admin") && task.Project?.CreatorId != currentUserId)
             {
-                return StatusCode(403, new { message = "Unauthorized." });
+                return StatusCode(403, new { message = "Only the project manager or assigned user can update the task." });
             }
 
             // 3. Map DTO to Entity
