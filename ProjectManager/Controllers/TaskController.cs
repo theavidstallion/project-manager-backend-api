@@ -27,6 +27,23 @@ namespace ProjectManager.Controllers
         }
 
 
+        // ---------------------------------------------------
+        // -- HELPER METHODS -- 
+
+        // Helper method for authorization
+        private bool CanUserModifyTask(ProjectTask task)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (User.IsInRole("Admin")) return true;
+            if (User.IsInRole("Manager") && task.Project?.CreatorId == userId) return true;
+            if (User.IsInRole("Member") && task.AssignedUserId == userId) return true;
+            return false;
+        }
+
+
+        // ---------------------------------------------------
+
+
         // Actions
         // Create Task inside a Project
         [Authorize(Roles = "Admin, Manager")]
@@ -86,60 +103,31 @@ namespace ProjectManager.Controllers
 
         // --------------------------------------------------------------
 
-        // --- "MapToDto" HELPER (Need to get into mapping things) ---
-        private List<TaskResponseDto> MapToDto(IEnumerable<ProjectTask> tasks)
-        {
-            return tasks.Select(t => new TaskResponseDto
-            {
-                Id = t.Id,
-                Title = t.Title,
-                Description = t.Description,
-                Status = t.Status,
-                Priority = t.Priority,
-                DueDate = t.DueDate,
-                ProjectId = t.ProjectId,
-                ProjectName = t.Project?.Name,
-                AssignedUserId = t.AssignedUserId,
-                AssignedUserName = t.AssignedUser?.FirstName,
-
-                Tags = t.TaskTags
-                    .Select(tt => tt.Tag.Name)
-                    .ToList()
-            }).ToList();
-        }
 
 
-        [HttpGet] // Route: GET api/Task
+
+        [HttpGet]
         public async Task<IActionResult> GetTasks([FromQuery] int? projectId)
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            IEnumerable<TaskResponseDto> tasks; // NOTE: Variable type is now the DTO
 
             if (!projectId.HasValue)
             {
-                // --- DASHBOARD LOGIC ---
-                // Admin: null (Sees all)
-                // Manager: ID (Sees only tasks they manage/created via SP logic)
-                // Member: ID (Sees assigned)
+                // Dashboard
                 string? filterId = User.IsInRole("Admin") ? null : currentUserId;
-
-                var tasks = await _taskRepository.GetDashboardTasksAsync(filterId);
-                return Ok(MapToDto(tasks));
+                tasks = await _taskRepository.GetDashboardTasksAsync(filterId);
             }
             else
             {
-                // --- PROJECT PAGE LOGIC ---
-                // Admin: null (Sees all)
-                // Manager: null (See ALL tasks inside the project page)
-                // Member: ID (Sees only their tasks)
-                string? filterId = (User.IsInRole("Admin") || User.IsInRole("Manager"))
-                    ? null
-                    : currentUserId;
-
-                var tasks = await _taskRepository.GetProjectTasksAsync(projectId.Value, filterId);
-                return Ok(MapToDto(tasks));
+                // Project Page
+                string? filterId = (User.IsInRole("Admin") || User.IsInRole("Manager")) ? null : currentUserId;
+                tasks = await _taskRepository.GetProjectTasksAsync(projectId.Value, filterId);
             }
-        }
 
+            // Return directly - Mapping happened in the Repo via ADO.NET
+            return Ok(tasks);
+        }
 
 
         // --------------------------------------------------------------
@@ -207,30 +195,12 @@ namespace ProjectManager.Controllers
                 return NotFound(new { Message = "Task not found." });
             }
             // Authorization Check
-            if (User.IsInRole("Admin"))
+            var authCheck = CanUserModifyTask(task);
+            if (!authCheck)
             {
-                // Admins can re-assign any task
+                return StatusCode(403, "You do not have permission to re-assign this task.");
             }
-            else if (User.IsInRole("Manager"))
-            {
-                // Managers can re-assign tasks only within projects they manage
-                if (task.Project.CreatorId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Managers can only re-assign tasks within projects they manage." });
-                }
-            }
-            else if (User.IsInRole("Member"))
-            {
-                // Assigned Members can re-assign their own tasks
-                if (task.AssignedUserId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Members can only re-assign tasks assigned to them." });
-                }
-            }
-            else
-            {
-                return StatusCode(403, new { message = "Access denied: Insufficient role permissions." });
-            }
+
             // Perform Re-assignment
             var result = await _taskRepository.AssignTaskToUserAsync(task, model.NewAssignedUserId);
             if (result)
@@ -320,7 +290,7 @@ namespace ProjectManager.Controllers
 
 
         // Update Task Tags
-        // PUT: api/Task/5/tags (Tags Only)
+        // PUT: api/Task/{taskId}/tags (Tags Only)
         [Authorize]
         [HttpPut("{id}/tags")]
         public async Task<IActionResult> UpdateTaskTags(int id, [FromBody] List<int> tagIds)
@@ -336,20 +306,7 @@ namespace ProjectManager.Controllers
         }
 
 
-        // Helper method for authorization
-        private bool CanUserModifyTask(ProjectTask task)
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (User.IsInRole("Admin")) return true;
-            if (User.IsInRole("Manager") && task.Project?.CreatorId == userId) return true;
-            if (User.IsInRole("Member") && task.AssignedUserId == userId) return true;
-            return false;
-        }
-
-
-
-
-        // Update Task Status for member role only
+        // Update Task Status (for Member's ease - can be removed)
         [Authorize]
         [HttpPut("{id}/status")] // Route: PUT /api/Task/{id}/status
         public async Task<IActionResult> UpdateTaskStatusByMember(int id, [FromBody] ChangeTaskStatusDto statusDto)

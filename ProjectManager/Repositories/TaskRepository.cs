@@ -1,7 +1,10 @@
-﻿using ProjectManager.Models;
-using ProjectManager.Data;
+﻿using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.Data;
+using ProjectManager.DTOs;
 using ProjectManager.Interfaces;
+using ProjectManager.Models;
+using System.Data;
 
 namespace ProjectManager.Repositories
 {
@@ -13,49 +16,89 @@ namespace ProjectManager.Repositories
             _context = context;
         }
 
-        // "Relationship FIX-UP" HELPER 
-        private async Task PopulateTaskDataAsync(List<ProjectTask> tasks)
+        // --- 1. Dashboard Method ---
+        public async Task<IEnumerable<TaskResponseDto>> GetDashboardTasksAsync(string? userId)
         {
-            if (!tasks.Any()) return;
+            var parameters = new[]
+            {
+            new SqlParameter("@UserId", userId ?? (object)DBNull.Value)
+        };
 
-            var taskIds = tasks.Select(t => t.Id).ToList();
-
-            // Load Projects (to know which project the task belongs to)
-            var projectIds = tasks.Select(t => t.ProjectId).Distinct().ToList();
-            await _context.Projects.Where(p => projectIds.Contains(p.Id)).LoadAsync();
-
-            // Load Assigned Users
-            var userIds = tasks.Select(t => t.AssignedUserId).Distinct().ToList();
-            await _context.Users.Where(u => userIds.Contains(u.Id)).LoadAsync();
-
-            // Load Tags (Many-to-Many)
-            await _context.TaskTags
-                .Include(tt => tt.Tag)
-                .Where(tt => taskIds.Contains(tt.TaskId))
-                .LoadAsync();
+            return await ExecuteStoredProcAsync("spGetDashboardTasks", parameters);
         }
 
-        public async Task<IEnumerable<ProjectTask>> GetDashboardTasksAsync(string? userId)
+        // --- 2. Project Page Method ---
+        public async Task<IEnumerable<TaskResponseDto>> GetProjectTasksAsync(int projectId, string? userId)
         {
-            var tasks = await _context.Tasks
-                .FromSqlInterpolated($"EXEC dbo.spGetDashboardTasks @UserId = {userId}")
-                .ToListAsync();
+            var parameters = new[]
+            {
+            new SqlParameter("@ProjectId", projectId),
+            new SqlParameter("@UserId", userId ?? (object)DBNull.Value)
+        };
 
-            await PopulateTaskDataAsync(tasks);
+            return await ExecuteStoredProcAsync("spGetProjectTasks", parameters);
+        }
+
+        // --- Helper to DRY up the ADO.NET logic ---
+        private async Task<List<TaskResponseDto>> ExecuteStoredProcAsync(string spName, SqlParameter[] parameters)
+        {
+            var tasks = new List<TaskResponseDto>();
+            var dt = new DataTable();
+
+            using (var connection = new SqlConnection(_context.Database.GetConnectionString()))
+            using (var command = new SqlCommand(spName, connection))
+            {
+                command.CommandType = CommandType.StoredProcedure;
+                command.Parameters.AddRange(parameters);
+
+                using (var adapter = new SqlDataAdapter(command))
+                {
+                    connection.Open();
+                    adapter.Fill(dt);
+                }
+            }
+
+            foreach (DataRow row in dt.Rows)
+            {
+                tasks.Add(MapRowToDto(row));
+            }
+
             return tasks;
         }
 
-        public async Task<IEnumerable<ProjectTask>> GetProjectTasksAsync(int? projectId, string? userId)
+        // --- Helper to Map DataRow to DTO ---
+        private TaskResponseDto MapRowToDto(DataRow row)
         {
-            var tasks = await _context.Tasks
-                .FromSqlInterpolated($"EXEC dbo.spGetProjectTasks @ProjectId = {projectId}, @UserId = {userId}")
-                .ToListAsync();
+            return new TaskResponseDto
+            {
+                Id = Convert.ToInt32(row["Id"]),
+                Title = row["Title"].ToString(),
+                Description = row["Description"] != DBNull.Value ? row["Description"].ToString() : "",
+                Status = row["Status"].ToString(),
+                Priority = row["Priority"].ToString(),
+                DueDate = Convert.ToDateTime(row["DueDate"]),
+                CreatorId = row["CreatorId"].ToString(),
+                ProjectId = Convert.ToInt32(row["ProjectId"]),
+                AssignedUserId = row["AssignedUserId"] != DBNull.Value ? row["AssignedUserId"].ToString() : null,
 
-            await PopulateTaskDataAsync(tasks);
-            return tasks;
+                // New Mapped Columns
+                ProjectName = row["ProjectName"].ToString(),
+                AssignedUserName = row["AssignedUserFirstName"] != DBNull.Value
+                    ? $"{row["AssignedUserFirstName"]} {row["AssignedUserLastName"]}"
+                    : "Unassigned",
+
+                // Tag Parsing (Splitting the comma-separated string)
+                TagIds = row["TagIds"] != DBNull.Value
+                    ? row["TagIds"].ToString().Split(',').Select(int.Parse).ToList()
+                    : new List<int>(),
+
+                Tags = row["TagNames"] != DBNull.Value
+                    ? row["TagNames"].ToString().Split(',').ToList()
+                    : new List<string>()
+            };
         }
 
-        
+
         //-------------------------------------------------
 
 

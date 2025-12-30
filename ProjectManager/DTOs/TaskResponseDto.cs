@@ -12,15 +12,18 @@
 
         public string CreatorId { get; set; }
 
-        // Foreign Keys (Kept for clarity/editing, but names are provided too)
+        // Foreign Keys
         public int ProjectId { get; set; }
-        public string? AssignedUserId { get; set; } // Can be null if not yet assigned
+        public string? AssignedUserId { get; set; }
 
-        // User-Friendly Data (New fields)
+        // User-Friendly Data
         public string ProjectName { get; set; }
         public string AssignedUserName { get; set; }
 
-        // Tags as Names (Clean list of tag strings)
-        public List<string> Tags { get; set; }
+        // 🟢 ADD THIS for Edit/Update operations
+        public List<int> TagIds { get; set; } = new();
+
+        // Tags as Names (For Display)
+        public List<string> Tags { get; set; } = new();
     }
 }

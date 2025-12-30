@@ -1,4 +1,5 @@
-﻿using ProjectManager.Models;
+﻿using ProjectManager.DTOs;
+using ProjectManager.Models;
 
 namespace ProjectManager.Interfaces
 {
@@ -9,9 +10,9 @@ namespace ProjectManager.Interfaces
         Task<ProjectTask?> GetTaskByIdAsync(int id);
 
         // -------------------------------------------
-        Task<IEnumerable<ProjectTask>> GetProjectTasksAsync(int? projectId, string? userId);
+        Task<IEnumerable<TaskResponseDto>> GetProjectTasksAsync(int projectId, string? userId);
 
-        Task<IEnumerable<ProjectTask>> GetDashboardTasksAsync(string? userId);
+        Task<IEnumerable<TaskResponseDto>> GetDashboardTasksAsync(string? userId);
 
         // -------------------------------------------
 

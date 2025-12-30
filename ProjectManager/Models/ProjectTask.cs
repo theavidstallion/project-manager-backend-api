@@ -1,4 +1,6 @@
-﻿namespace ProjectManager.Models
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+namespace ProjectManager.Models
 {
     public class ProjectTask
     {
@@ -23,5 +25,13 @@
         public ICollection<TaskTag> TaskTags { get; set; } = new List<TaskTag>();
 
         public ICollection<Comment> Comments { get; set; } = new List<Comment>();
+
+
+        //[NotMapped]
+        //public string? ProjectName { get; set; }
+        //[NotMapped]
+        //public string? AssignedUserFirstName { get; set; }
+        //[NotMapped]
+        //public string? AssignedUserLastName { get; set; }
     }
 }
