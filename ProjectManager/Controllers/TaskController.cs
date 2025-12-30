@@ -19,27 +19,14 @@ namespace ProjectManager.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IProjectRepository _projectRepository;
         private readonly ITaskRepository _taskRepository;
-        public TaskController(UserManager<ApplicationUser> userManager, ITaskRepository taskRepository, IProjectRepository projectRepository)
+        private readonly IAuthorizationService _authorizationService;
+        public TaskController(UserManager<ApplicationUser> userManager, ITaskRepository taskRepository, IProjectRepository projectRepository, IAuthorizationService authorizationService)
         {
             _userManager = userManager;
             _taskRepository = taskRepository;
             _projectRepository = projectRepository;
+            _authorizationService = authorizationService;
         }
-
-
-        // ---------------------------------------------------
-        // -- HELPER METHODS -- 
-
-        // Helper method for authorization
-        private bool CanUserModifyTask(ProjectTask task)
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (User.IsInRole("Admin")) return true;
-            if (User.IsInRole("Manager") && task.Project?.CreatorId == userId) return true;
-            if (User.IsInRole("Member") && task.AssignedUserId == userId) return true;
-            return false;
-        }
-
 
         // ---------------------------------------------------
 
@@ -55,17 +42,17 @@ namespace ProjectManager.Controllers
             {
                 return Unauthorized("User not found.");
             }
-            if (User.IsInRole("User"))
-            {
-                return Forbid("You do not have permission to create tasks.");
-            }
-
             var projectId = taskModel.ProjectId;
             var project = await _projectRepository.GetProjectByIdAsync(projectId);
 
             if (project == null)
             {
                 return NotFound($"Project with ID {projectId} not found.");
+            }
+
+            if (User.IsInRole("User"))
+            {
+                return Forbid("You do not have permission to create tasks.");
             }
             if (User.IsInRole("Manager"))
             {
@@ -195,8 +182,8 @@ namespace ProjectManager.Controllers
                 return NotFound(new { Message = "Task not found." });
             }
             // Authorization Check
-            var authCheck = CanUserModifyTask(task);
-            if (!authCheck)
+            var authCheck = await _authorizationService.AuthorizeAsync(User, task, "CanModifyTask");
+            if (!authCheck.Succeeded)
             {
                 return StatusCode(403, "You do not have permission to re-assign this task.");
             }
@@ -271,7 +258,8 @@ namespace ProjectManager.Controllers
             if (task == null) return NotFound(new { Message = "Task not found." });
 
             // Authorization (Gatekeeper)
-            if (!CanUserModifyTask(task)) return StatusCode(403, "Unauthorized");
+            var authCheck = await _authorizationService.AuthorizeAsync(User, task, "CanModifyTask");
+            if (!authCheck.Succeeded) return StatusCode(403, "Unauthorized");
 
             // Map DTO to Entity
             // We update the properties on the 'task' object we already have in memory
@@ -299,7 +287,8 @@ namespace ProjectManager.Controllers
             if (task == null) return NotFound();
 
             // AUTH CHECK
-            if (!CanUserModifyTask(task)) return StatusCode(403, "Unauthorized");
+            var authCheck = await _authorizationService.AuthorizeAsync(User, task, "CanModifyTask");
+            if (!authCheck.Succeeded) return StatusCode(403, "Unauthorized");
 
             var success = await _taskRepository.UpdateTaskTagsAsync(id, tagIds);
             return success ? NoContent() : StatusCode(500);
@@ -318,7 +307,8 @@ namespace ProjectManager.Controllers
                 return NotFound(new { Message = "Task not found." });
             }
             // Authorization: Members can only change status of tasks assigned to them
-            if (!CanUserModifyTask(task)) return StatusCode(403, "Unauthorized");
+            var authCheck = await _authorizationService.AuthorizeAsync(User, task, "CanModifyTask");
+            if (!authCheck.Succeeded) return StatusCode(403, "Unauthorized");
 
             // Update status
             var result = await _taskRepository.UpdateTaskStatusAsync(task, statusDto.NewStatus);

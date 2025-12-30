@@ -16,7 +16,7 @@ namespace ProjectManager.Repositories
             _context = context;
         }
 
-        // --- 1. Dashboard Method ---
+        // --- Dashboard Method ---
         public async Task<IEnumerable<TaskResponseDto>> GetDashboardTasksAsync(string? userId)
         {
             var parameters = new[]
@@ -27,7 +27,7 @@ namespace ProjectManager.Repositories
             return await ExecuteStoredProcAsync("spGetDashboardTasks", parameters);
         }
 
-        // --- 2. Project Page Method ---
+        // --- Project Page Method ---
         public async Task<IEnumerable<TaskResponseDto>> GetProjectTasksAsync(int projectId, string? userId)
         {
             var parameters = new[]

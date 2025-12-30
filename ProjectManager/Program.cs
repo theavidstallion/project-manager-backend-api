@@ -1,18 +1,21 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using ProjectManager.Auth.Handlers;
+using ProjectManager.Auth.Requirements;
 using ProjectManager.Data;
 using ProjectManager.Filters;
 using ProjectManager.Interfaces;
 using ProjectManager.Middleware;
 using ProjectManager.Models;
+using ProjectManager.Repositories;
 using ProjectManager.Services; 
 using Serilog;
 using System.Security.Claims;
 using System.Text;
-using ProjectManager.Repositories;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -44,11 +47,9 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IProjectRepository, ProjectRespository>();
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
+builder.Services.AddSingleton<IAuthorizationHandler, ModifyTaskHandler>();
 
 // 1b. Database & Identity
-// Pre 500.30 error
-//builder.Services.AddDbContext<ApplicationDbContext>(options =>
-//     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -116,8 +117,8 @@ builder.Services.AddAuthentication(options =>
 // 1e. Authorization Policies
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("CanCloseTask", policy =>
-    policy.RequireClaim(DataSeeder.claimType, DataSeeder.claimValue));
+    options.AddPolicy("CanModifyTask", policy =>
+        policy.Requirements.Add(new ModifyTaskRequirement()));
 });
 
 
@@ -125,7 +126,7 @@ var app = builder.Build();
 
 // --- 2. Middleware Configuration ---
 
-// Execute Data Seeder (Role/Claim/Admin User Creation)
+// Execute Data Seeder (Role/Admin User Creation)
 using (var scope = app.Services.CreateScope())
 {
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
@@ -142,11 +143,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// 2b. Custom Middleware (Uncomment and configure when ready)
-// app.UseMiddleware<ErrorHandlingMiddleware>();
-// app.UseMiddleware<CorrelationIdMiddleware>();
 
-// 2c. Standard Middleware
+// 2b. Standard Middleware
 app.UseHttpsRedirection();
 
 // CORS policy, allow for frontend client.
