@@ -47,7 +47,10 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IProjectRepository, ProjectRespository>();
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
-builder.Services.AddSingleton<IAuthorizationHandler, ModifyTaskHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, TaskAuthorizationHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, ProjectAuthorizationHandler>();
+
+
 
 // 1b. Database & Identity
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -117,8 +120,33 @@ builder.Services.AddAuthentication(options =>
 // 1e. Authorization Policies
 builder.Services.AddAuthorization(options =>
 {
+    // Task Policies
+
     options.AddPolicy("CanModifyTask", policy =>
-        policy.Requirements.Add(new ModifyTaskRequirement()));
+        policy.Requirements.Add(TaskOperations.Update));
+
+    options.AddPolicy("CanDeleteTask", policy =>
+        policy.Requirements.Add(TaskOperations.Delete));
+
+    options.AddPolicy("CanViewTask", policy =>
+        policy.Requirements.Add(TaskOperations.View));
+
+    // Project Policies
+
+    options.AddPolicy("CanManageProject", policy =>
+        policy.Requirements.Add(ProjectOperations.ManageMembers)); // Create is a project operation for task creation, Project Creation is handled by role based authorization
+
+    options.AddPolicy("CanViewProject", policy =>
+        policy.Requirements.Add(ProjectOperations.View));
+
+    options.AddPolicy("CanModifyProject", policy =>
+        policy.Requirements.Add(ProjectOperations.Update));
+
+    options.AddPolicy("CanDeleteProject", policy =>
+        policy.Requirements.Add(ProjectOperations.Delete));
+
+    options.AddPolicy("CanManageMembers", policy =>
+        policy.Requirements.Add(ProjectOperations.ManageMembers));
 });
 
 

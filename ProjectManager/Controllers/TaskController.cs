@@ -50,17 +50,10 @@ namespace ProjectManager.Controllers
                 return NotFound($"Project with ID {projectId} not found.");
             }
 
-            if (User.IsInRole("User"))
+            var authCheck = await _authorizationService.AuthorizeAsync(User, project, "CanManageProject");
+            if (!authCheck.Succeeded)
             {
-                return Forbid("You do not have permission to create tasks.");
-            }
-            if (User.IsInRole("Manager"))
-            {
-                var isManagerOfProject = project.CreatorId == user.Id;
-                if (!isManagerOfProject)
-                {
-                    return Forbid("Managers can only create tasks in projects they manage.");
-                }
+                return StatusCode(403, "You do not have permission to create tasks in this project.");
             }
 
             // Mapping DTO to Model
@@ -131,16 +124,11 @@ namespace ProjectManager.Controllers
             {
                 return NotFound("Task not found.");
             }
-            if (User.IsInRole("Admin") || User.IsInRole("Manager"))
+            
+            var authCheck = await _authorizationService.AuthorizeAsync(User, task, "CanViewTask");
+            if (!authCheck.Succeeded)
             {
-
-            }
-            if (User.IsInRole("Member"))
-            {
-                if (task.AssignedUserId != userId)
-                {
-                    return StatusCode(403, new { message = "Members can only access tasks assigned to them." });
-                }
+                return StatusCode(403, "You do not have permission to view this task.");
             }
 
             var taskDto = new TaskResponseDto
@@ -216,23 +204,10 @@ namespace ProjectManager.Controllers
                 return BadRequest("Cannot delete a task that is In Progress.");
             }
 
-            // Admin Check: Full control
-            if (User.IsInRole("Admin"))
+            var authCheck = await _authorizationService.AuthorizeAsync(User, task, "CanModifyTask");
+            if (!authCheck.Succeeded)
             {
-                // Admin is authorized, proceed to delete.
-            }
-            // Manager Check: Must be the creator/owner
-            else if (User.IsInRole("Manager"))
-            {
-                if (task.CreatorId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Managers can only delete tasks they manage/created." } );
-                }
-            }
-            else
-            {
-                // Should be caught by [Authorize], but as a final safeguard:
-                return StatusCode(403);
+                return StatusCode(403, "You do not have permission to delete this task.");
             }
 
             var result = await _taskRepository.DeleteTaskAsync(id);

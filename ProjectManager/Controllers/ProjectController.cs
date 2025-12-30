@@ -18,12 +18,14 @@ namespace ProjectManager.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ApplicationDbContext _context;
         private readonly IProjectRepository _projectRepository;
+        private readonly IAuthorizationService _authorizationService;
 
-        public ProjectController(UserManager<ApplicationUser> userManager, ApplicationDbContext context, IProjectRepository projectRepository)
+        public ProjectController(UserManager<ApplicationUser> userManager, ApplicationDbContext context, IProjectRepository projectRepository, IAuthorizationService authorizationService)
         {
             _userManager = userManager;
             _context = context;
             _projectRepository = projectRepository;
+            _authorizationService = authorizationService;
         }
 
 
@@ -144,13 +146,11 @@ namespace ProjectManager.Controllers
                 return NotFound($"Project with ID {id} not found.");
             }
 
-            // 2. ENFORCE VIEWING PERMISSIONS (Logic remains the same)
-            bool isAdminOrManager = User.IsInRole("Admin") || User.IsInRole("Manager");
-            bool isMemberOfProject = project.ProjectUsers.Any(pu => pu.UserId == currentUserId);
-
-            if (!isAdminOrManager && !isMemberOfProject)
+            // ENFORCE VIEWING PERMISSIONS (Logic remains the same)
+            var authCheck = await _authorizationService.AuthorizeAsync(User, project, "CanViewProject");
+            if (!authCheck.Succeeded)
             {
-                return StatusCode(403, new { message = "You don't have permission to view this project." });
+                return StatusCode(403, "Unauthorized.");
             }
 
             // 3. Map Entity to DTO (Fixing the data display)
@@ -204,24 +204,12 @@ namespace ProjectManager.Controllers
             }
 
 
-            // Admin Check: Full control
-            if (User.IsInRole("Admin"))
+            var authCheck = await _authorizationService.AuthorizeAsync(User, projectToDelete, "CanDeleteProject");
+            if (!authCheck.Succeeded)
             {
-                // Admin is authorized, proceed to delete.
+                return StatusCode(403, "Unauthorized to delete this project.");
             }
-            // Manager Check: Must be the creator/owner
-            else if (User.IsInRole("Manager"))
-            {
-                if (projectToDelete.CreatorId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Managers can only delete projects they manage." });
-                }
-            }
-            else
-            {
-                return StatusCode(403);
-            }
-            
+
             _context.Projects.Remove(projectToDelete);
             await _context.SaveChangesAsync();
 
@@ -257,21 +245,9 @@ namespace ProjectManager.Controllers
             }
 
             // Role Check
-            if (User.IsInRole("Admin"))
-            {
-                // Jump ahead, Admins have full rights
-            }
-            else if (User.IsInRole("Manager"))
-            {
-                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                if (project.CreatorId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Managers can only assign users to projects they manage/created." });
-                }
-            }
-            else
-            {
-                return StatusCode(403, new { message = "Only Admins and Managers can assign users to projects." });
+            var authCheck = await _authorizationService.AuthorizeAsync(User, project, "CanManageMembers");
+            if (!authCheck.Succeeded) {
+                return StatusCode(403, new { message = "Unauthorized to assign members to this project." });
             }
 
             var projectUser = new ProjectUser
@@ -298,22 +274,11 @@ namespace ProjectManager.Controllers
                 return NotFound($"Project with ID {id} not found.");
             }
             // Role Check
-            if (User.IsInRole("Admin"))
-            {
-                // Jump ahead, Admins have full rights
+            var authCheck = await _authorizationService.AuthorizeAsync(User, project, "CanModifyProject");
+            if (!authCheck.Succeeded) {
+                return StatusCode(403, new { message = "Unauthorized to edit this project." });
             }
-            else if (User.IsInRole("Manager"))
-            {
-                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                if (project.CreatorId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Managers can only edit projects they manage/created." });
-                }
-            }
-            else
-            {
-                return StatusCode(403, new { message = "Only Admins and Managers can edit projects." });
-            }
+
             // Update project properties
             project.Name = model.Name;
             project.Description = model.Description;
@@ -349,22 +314,11 @@ namespace ProjectManager.Controllers
             }
 
             // Role Check
-            if (User.IsInRole("Admin"))
-            {
-                // Jump ahead, Admins have full rights
+            var authCheck = await _authorizationService.AuthorizeAsync(User, project, "CanManageMembers");
+            if (authCheck == null) {
+                return StatusCode(403, new { message = "Unauthorized to add members to this project." });
             }
-            else if (User.IsInRole("Manager"))
-            {
-                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                if (project.CreatorId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Managers can only add members to projects they manage/created." });
-                }
-            }
-            else
-            {
-                return StatusCode(403, new { message = "Only Admins and Managers can add members to projects." });
-            }
+
             var projectUser = new ProjectUser
             {
                 UserId = model.UserId,
@@ -377,47 +331,37 @@ namespace ProjectManager.Controllers
 
 
         // Remove a member from the project
-        [Authorize(Roles = "Admin, Manager")]
-        [HttpDelete("{id}/remove-member/{userId}")] // Route: DELETE api/Project/{id}/remove-member/{userId}
-        public async Task<IActionResult> RemoveMemberFromProject(int id, string userId)
-        {
-            var project = await _context.Projects.FindAsync(id);
-            if (project == null)
-            {
-                return NotFound($"Project with ID {id} not found.");
-            }
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-            {
-                return NotFound($"User with ID {userId} not found.");
-            }
-            var projectUser = await _context.ProjectUsers
-                .FirstOrDefaultAsync(pu => pu.ProjectId == id && pu.UserId == userId);
-            if (projectUser == null)
-            {
-                return NotFound($"User with ID {userId} is not a member of project ID {id}.");
-            }
-            // Role Check
-            if (User.IsInRole("Admin"))
-            {
-                // Jump ahead, Admins have full rights
-            }
-            else if (User.IsInRole("Manager"))
-            {
-                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                if (project.CreatorId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Managers can only remove members from projects they manage/created." });
-                }
-            }
-            else
-            {
-                return StatusCode(403, new { message = "Only Admins and Managers can remove members from projects." });
-            }
-            _context.ProjectUsers.Remove(projectUser);
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
+        //[Authorize(Roles = "Admin, Manager")]
+        //[HttpDelete("{id}/remove-member/{userId}")] // Route: DELETE api/Project/{id}/remove-member/{userId}
+        //public async Task<IActionResult> RemoveMemberFromProject(int id, string userId)
+        //{
+        //    var project = await _context.Projects.FindAsync(id);
+        //    if (project == null)
+        //    {
+        //        return NotFound($"Project with ID {id} not found.");
+        //    }
+        //    var user = await _userManager.FindByIdAsync(userId);
+        //    if (user == null)
+        //    {
+        //        return NotFound($"User with ID {userId} not found.");
+        //    }
+        //    var projectUser = await _context.ProjectUsers
+        //        .FirstOrDefaultAsync(pu => pu.ProjectId == id && pu.UserId == userId);
+        //    if (projectUser == null)
+        //    {
+        //        return NotFound($"User with ID {userId} is not a member of project ID {id}.");
+        //    }
+        //    // Role Check
+        //    var authCheck = await _authorizationService.AuthorizeAsync(User, project, "CanManageMembers");
+        //    if (!authCheck.Succeeded)
+        //    {
+        //        return StatusCode(403, new { message = "Unauthorized to remove members from this project." });
+        //    }
+
+        //    _context.ProjectUsers.Remove(projectUser);
+        //    await _context.SaveChangesAsync();
+        //    return NoContent();
+        //}
 
         // Remove Member from Project
         [Authorize(Roles = "Admin, Manager")]
@@ -432,10 +376,10 @@ namespace ProjectManager.Controllers
             if (project == null) return NotFound("Project not found.");
 
             // 1. Authorization: Only Admin or the Project Creator can remove members
-            var isAdmin = User.IsInRole("Admin");
-            if (!isAdmin && project.CreatorId != currentUserId)
+            var authCheck = await _authorizationService.AuthorizeAsync(User, project, "CanManageMembers");
+            if (!authCheck.Succeeded)
             {
-                return StatusCode(403, new { message = "Only the Project Manager or Admin can remove members." });
+                return StatusCode(403, "Unauthorized to remove members from this project.");
             }
 
             // 2. Prevent Manager from removing themselves (Optional safety)
