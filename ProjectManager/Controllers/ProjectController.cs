@@ -330,38 +330,6 @@ namespace ProjectManager.Controllers
         }
 
 
-        // Remove a member from the project
-        //[Authorize(Roles = "Admin, Manager")]
-        //[HttpDelete("{id}/remove-member/{userId}")] // Route: DELETE api/Project/{id}/remove-member/{userId}
-        //public async Task<IActionResult> RemoveMemberFromProject(int id, string userId)
-        //{
-        //    var project = await _context.Projects.FindAsync(id);
-        //    if (project == null)
-        //    {
-        //        return NotFound($"Project with ID {id} not found.");
-        //    }
-        //    var user = await _userManager.FindByIdAsync(userId);
-        //    if (user == null)
-        //    {
-        //        return NotFound($"User with ID {userId} not found.");
-        //    }
-        //    var projectUser = await _context.ProjectUsers
-        //        .FirstOrDefaultAsync(pu => pu.ProjectId == id && pu.UserId == userId);
-        //    if (projectUser == null)
-        //    {
-        //        return NotFound($"User with ID {userId} is not a member of project ID {id}.");
-        //    }
-        //    // Role Check
-        //    var authCheck = await _authorizationService.AuthorizeAsync(User, project, "CanManageMembers");
-        //    if (!authCheck.Succeeded)
-        //    {
-        //        return StatusCode(403, new { message = "Unauthorized to remove members from this project." });
-        //    }
-
-        //    _context.ProjectUsers.Remove(projectUser);
-        //    await _context.SaveChangesAsync();
-        //    return NoContent();
-        //}
 
         // Remove Member from Project
         [Authorize(Roles = "Admin, Manager")]
