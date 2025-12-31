@@ -13,10 +13,12 @@ namespace ProjectManager.Controllers
     public class CommentsController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly IAuthorizationService _authorizationService;
 
-        public CommentsController(ApplicationDbContext context)
+        public CommentsController(ApplicationDbContext context, IAuthorizationService authorizationService)
         {
             _context = context;
+            _authorizationService = authorizationService;
         }
 
 
@@ -104,16 +106,8 @@ namespace ProjectManager.Controllers
             var comment = await _context.Comments.FindAsync(id);
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            if (comment == null)
-            {
-                return NotFound(new { Message = "Comment not found." });
-            }
-
-            if (User.IsInRole("Admin"))
-            {
-                // Admins can delete any comment
-            }
-            else if (comment.AuthorId != userId)
+            var authCheck = await _authorizationService.AuthorizeAsync(User, comment, "CanDeleteComment");
+            if (!authCheck.Succeeded)
             {
                 return StatusCode(403, new { Message = "You do not have permission to delete this comment." });
             }
@@ -136,14 +130,13 @@ namespace ProjectManager.Controllers
             {
                 return NotFound(new { Message = "Comment not found." });
             }
-            if (User.IsInRole("Admin"))
-            {
-                // Admins can edit any comment
-            }
-            else if (comment.AuthorId != userId)
+            
+            var authCheck = await _authorizationService.AuthorizeAsync(User, comment, "CanEditComment");
+            if (!authCheck.Succeeded)
             {
                 return StatusCode(403, new { Message = "You do not have permission to edit this comment." });
             }
+
             comment.Content = commentDto.Content;
             await _context.SaveChangesAsync();
             return Ok(comment);

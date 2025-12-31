@@ -49,6 +49,7 @@ builder.Services.AddScoped<IProjectRepository, ProjectRespository>();
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<IAuthorizationHandler, TaskAuthorizationHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, ProjectAuthorizationHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, CommentAuthorizationHandler>();
 
 
 
@@ -147,6 +148,13 @@ builder.Services.AddAuthorization(options =>
 
     options.AddPolicy("CanManageMembers", policy =>
         policy.Requirements.Add(ProjectOperations.ManageMembers));
+
+    // Comment Policies
+
+    options.AddPolicy("CanEditComment", policy =>
+        policy.Requirements.Add(CommentOperations.Edit));
+    options.AddPolicy("CanDeleteComment", policy =>
+        policy.Requirements.Add(CommentOperations.Delete));
 });
 
 
