@@ -137,7 +137,7 @@ namespace ProjectManager.Controllers
 
                 // Eager load the members (Many-to-Many join) and THEN the actual User object
                 .Include(p => p.ProjectUsers)
-                    .ThenInclude(pu => pu.User) // CRITICAL: Loads the ApplicationUser object for names
+                    .ThenInclude(pu => pu.User) // Loads the ApplicationUser object for names
 
                 .FirstOrDefaultAsync(p => p.Id == id);
 
@@ -223,7 +223,12 @@ namespace ProjectManager.Controllers
         [HttpPost("{id}/members")] // Route: POST api/Project/{projectId}/members
         public async Task<IActionResult> AssignUserToProject (int id, [FromBody] ProjectMemberDto model)
         {
-            var project = await _context.Projects.FindAsync(id);
+            var project = await _context.Projects
+                .Include(p => p.Creator)
+                .Include(p => p.ProjectUsers)
+                    .ThenInclude(pu => pu.User)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
             if (project == null)
             {
                 return NotFound($"Project with ID {id} not found.");
@@ -268,7 +273,11 @@ namespace ProjectManager.Controllers
         [HttpPut("{id}")] // Route: PUT api/Project/{id}
         public async Task<IActionResult> EditProject(int id, [FromBody] EditProjectDto model)
         {
-            var project = await _context.Projects.FindAsync(id);
+            var project = await _context.Projects
+                .Include(p => p.Creator)
+                .Include(p => p.ProjectUsers)
+                    .ThenInclude(pu => pu.User)
+                .FirstOrDefaultAsync(p => p.Id == id);
             if (project == null)
             {
                 return NotFound($"Project with ID {id} not found.");
@@ -295,7 +304,11 @@ namespace ProjectManager.Controllers
         [HttpPost("{id}/add-member")] // Route: POST api/Project/{id}/add-member
         public async Task<IActionResult> AddMemberToProject(int id, [FromBody] ProjectMemberDto model)
         {
-            var project = await _context.Projects.FindAsync(id);
+            var project = await _context.Projects
+                .Include(p => p.Creator)
+                .Include(p => p.ProjectUsers)
+                    .ThenInclude(pu => pu.User)
+                .FirstOrDefaultAsync(p => p.Id == id);
             if (project == null)
             {
                 return NotFound($"Project with ID {id} not found.");
@@ -315,7 +328,7 @@ namespace ProjectManager.Controllers
 
             // Role Check
             var authCheck = await _authorizationService.AuthorizeAsync(User, project, "CanManageMembers");
-            if (authCheck == null) {
+            if (!authCheck.Succeeded) {
                 return StatusCode(403, new { message = "Unauthorized to add members to this project." });
             }
 
