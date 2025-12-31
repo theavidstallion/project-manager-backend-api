@@ -1,40 +1,67 @@
-﻿using ProjectManager.Interfaces;
-using ProjectManager.Models;
-using ProjectManager.Data;
+﻿using Dapper;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.Data;
+using ProjectManager.DTOs;
+using ProjectManager.Interfaces;
+using ProjectManager.Models;
+using System.Data;
 
 namespace ProjectManager.Repositories
 {
-    public class ProjectRespository : IProjectRepository
+
+    public class ProjectRepository : IProjectRepository
     {
         private readonly ApplicationDbContext _context;
-        public ProjectRespository(ApplicationDbContext context)
+
+        public ProjectRepository(ApplicationDbContext context)
         {
             _context = context;
         }
 
-        public async Task<IEnumerable<Project>> GetProjectsAsync(string? userId)
+        // NOTE: Return type changed to the DTO
+        public async Task<IEnumerable<ProjectResponseDto>> GetProjectsAsync(string? userId)
         {
-            // 1. Execute the Stored Procedure (The "Gatekeeper") - It filters projects
-            // Can't use Include() with FromSqlInterpolated() or whatever the heck was the reason, so we do it in two steps.
-            var projects = await _context.Projects
-                .FromSqlInterpolated($"EXEC dbo.spGetProjects @UserId = {userId}")
-                .ToListAsync();
+            using var connection = new SqlConnection(_context.Database.GetConnectionString());
 
-            if (!projects.Any()) return projects;
+            // 1. Dapper Fetch: One line replaces DataTable + Adapter + JSON conversion
+            var flatData = await connection.QueryAsync<FlatProjectResult>(
+                "spGetProjects",
+                new { UserId = userId },
+                commandType: CommandType.StoredProcedure
+            );
 
-            // 2. Fetch the Members
-            // We only fetch members for the specific projects returned by the SP.
-            var projectIds = projects.Select(p => p.Id).ToList();
+            // 2. Grouping & Mapping: Turn flat rows into nested DTOs
+            var result = flatData
+                .GroupBy(p => p.Id)
+                .Select(g =>
+                {
+                    var project = g.First();
+                    return new ProjectResponseDto
+                    {
+                        Id = project.Id,
+                        Name = project.Name,
+                        Description = project.Description,
+                        StartDate = project.StartDate,
+                        EndDate = project.EndDate,
+                        Status = project.Status,
+                        CreatorId = project.CreatorId,
+                        CreatorName = project.CreatorName,
 
-            await _context.ProjectUsers
-                .Include(pu => pu.User)
-                .Where(pu => projectIds.Contains(pu.ProjectId))
-                .LoadAsync(); // This "snaps" the users into the project objects in RAM
+                        // Handle the list of members
+                        Members = g.Where(m => !string.IsNullOrEmpty(m.MemberId))
+                                   .Select(m => new ProjectMemberDto
+                                   {
+                                       UserId = m.MemberId,
+                                       FirstName = m.MemberFirstName,
+                                       LastName = m.MemberLastName,
+                                       Email = m.MemberEmail
+                                   }).ToList()
+                    };
+                });
 
-            return projects;
+            return result;
         }
-
 
         public async Task<Project?> GetProjectByIdAsync(int id)
         {

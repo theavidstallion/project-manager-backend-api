@@ -1,4 +1,5 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using Dapper;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using ProjectManager.Data;
 using ProjectManager.DTOs;
@@ -16,86 +17,59 @@ namespace ProjectManager.Repositories
             _context = context;
         }
 
-        // --- Dashboard Method ---
-        public async Task<IEnumerable<TaskResponseDto>> GetDashboardTasksAsync(string? userId)
+        // -------------------------------------------------
+        // Helper Methods
+        private async Task<IEnumerable<TaskResponseDto>> FetchTasksWithDapper(string spName, object parameters)
         {
-            var parameters = new[]
+            using var connection = new SqlConnection(_context.Database.GetConnectionString());
+
+            // 1. Dapper Fetch: Get raw flat data
+            var flatTasks = await connection.QueryAsync<FlatTaskResult>(
+                spName,
+                parameters,
+                commandType: CommandType.StoredProcedure
+            );
+
+            // 2. Map: Convert Flat Result -> Final DTO
+            return flatTasks.Select(t => new TaskResponseDto
             {
-            new SqlParameter("@UserId", userId ?? (object)DBNull.Value)
-        };
+                Id = t.Id,
+                Title = t.Title,
+                Description = t.Description,
+                Status = t.Status,
+                Priority = t.Priority,
+                DueDate = t.DueDate,
+                CreatorId = t.CreatorId,
+                ProjectId = t.ProjectId,
+                AssignedUserId = t.AssignedUserId,
 
-            return await ExecuteStoredProcAsync("spGetDashboardTasks", parameters);
-        }
-
-        // --- Project Page Method ---
-        public async Task<IEnumerable<TaskResponseDto>> GetProjectTasksAsync(int projectId, string? userId)
-        {
-            var parameters = new[]
-            {
-            new SqlParameter("@ProjectId", projectId),
-            new SqlParameter("@UserId", userId ?? (object)DBNull.Value)
-        };
-
-            return await ExecuteStoredProcAsync("spGetProjectTasks", parameters);
-        }
-
-        // --- Helper to DRY up the ADO.NET logic ---
-        private async Task<List<TaskResponseDto>> ExecuteStoredProcAsync(string spName, SqlParameter[] parameters)
-        {
-            var tasks = new List<TaskResponseDto>();
-            var dt = new DataTable();
-
-            using (var connection = new SqlConnection(_context.Database.GetConnectionString()))
-            using (var command = new SqlCommand(spName, connection))
-            {
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.AddRange(parameters);
-
-                using (var adapter = new SqlDataAdapter(command))
-                {
-                    connection.Open();
-                    adapter.Fill(dt);
-                }
-            }
-
-            foreach (DataRow row in dt.Rows)
-            {
-                tasks.Add(MapRowToDto(row));
-            }
-
-            return tasks;
-        }
-
-        // --- Helper to Map DataRow to DTO ---
-        private TaskResponseDto MapRowToDto(DataRow row)
-        {
-            return new TaskResponseDto
-            {
-                Id = Convert.ToInt32(row["Id"]),
-                Title = row["Title"].ToString(),
-                Description = row["Description"] != DBNull.Value ? row["Description"].ToString() : "",
-                Status = row["Status"].ToString(),
-                Priority = row["Priority"].ToString(),
-                DueDate = Convert.ToDateTime(row["DueDate"]),
-                CreatorId = row["CreatorId"].ToString(),
-                ProjectId = Convert.ToInt32(row["ProjectId"]),
-                AssignedUserId = row["AssignedUserId"] != DBNull.Value ? row["AssignedUserId"].ToString() : null,
-
-                // New Mapped Columns
-                ProjectName = row["ProjectName"].ToString(),
-                AssignedUserName = row["AssignedUserFirstName"] != DBNull.Value
-                    ? $"{row["AssignedUserFirstName"]} {row["AssignedUserLastName"]}"
+                ProjectName = t.ProjectName,
+                AssignedUserName = t.AssignedUserFirstName != null
+                    ? $"{t.AssignedUserFirstName} {t.AssignedUserLastName}"
                     : "Unassigned",
 
-                // Tag Parsing (Splitting the comma-separated string)
-                TagIds = row["TagIds"] != DBNull.Value
-                    ? row["TagIds"].ToString().Split(',').Select(int.Parse).ToList()
+                // 3. Logic: Convert Comma-Separated Strings to Lists
+                TagIds = !string.IsNullOrEmpty(t.TagIds)
+                    ? t.TagIds.Split(',').Select(int.Parse).ToList()
                     : new List<int>(),
 
-                Tags = row["TagNames"] != DBNull.Value
-                    ? row["TagNames"].ToString().Split(',').ToList()
+                Tags = !string.IsNullOrEmpty(t.TagNames)
+                    ? t.TagNames.Split(',').ToList()
                     : new List<string>()
-            };
+            });
+        }
+
+        // -------------------------------------------------
+
+
+        public async Task<IEnumerable<TaskResponseDto>> GetDashboardTasksAsync(string? userId)
+        {
+            return await FetchTasksWithDapper("spGetDashboardTasks", new { UserId = userId });
+        }
+
+        public async Task<IEnumerable<TaskResponseDto>> GetProjectTasksAsync(int projectId, string? userId)
+        {
+            return await FetchTasksWithDapper("spGetProjectTasks", new { ProjectId = projectId, UserId = userId });
         }
 
 

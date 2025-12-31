@@ -45,7 +45,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddScoped<IProjectRepository, ProjectRespository>();
+builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<IAuthorizationHandler, TaskAuthorizationHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, ProjectAuthorizationHandler>();

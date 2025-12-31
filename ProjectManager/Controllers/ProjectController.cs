@@ -35,39 +35,17 @@ namespace ProjectManager.Controllers
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // 1. DECISION LOGIC: Determine what the SP needs
-            // If Admin/Manager, we send null (Get All).
-            // If Member, we send their ID (Filtered).
+            // 1. Logic
             string? filterId = (User.IsInRole("Admin") || User.IsInRole("Manager"))
                 ? null
                 : currentUserId;
 
+            // 2. Fetch (Returns DTOs directly)
             var projects = await _projectRepository.GetProjectsAsync(filterId);
 
-            // 2. MAPPING: Entity -> DTO
-            var projectDtos = projects.Select(project => new ProjectResponseDto
-            {
-                Id = project.Id,
-                Name = project.Name,
-                Description = project.Description,
-                StartDate = project.StartDate,
-                EndDate = project.EndDate,
-                Status = project.Status,
-                CreatorId = project.CreatorId,
-                CreatorName = project.CreatorName,
-
-                Members = project.ProjectUsers.Select(pu => new ProjectMemberDto
-                {
-                    UserId = pu.UserId,
-                    FirstName = pu.User?.FirstName,
-                    LastName = pu.User?.LastName,
-                    Email = pu.User?.Email
-                }).ToList()
-            }).ToList();
-
-            return Ok(projectDtos);
+            // 3. Return
+            return Ok(projects);
         }
-
 
 
 

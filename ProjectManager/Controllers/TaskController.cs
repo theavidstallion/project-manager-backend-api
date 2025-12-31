@@ -87,25 +87,22 @@ namespace ProjectManager.Controllers
 
 
         [HttpGet]
-        public async Task<IActionResult> GetTasks([FromQuery] int? projectId)
+        public async Task<IActionResult> GetTasksAsync([FromQuery] int? projectId)
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            IEnumerable<TaskResponseDto> tasks; // NOTE: Variable type is now the DTO
+            IEnumerable<TaskResponseDto> tasks;
 
             if (!projectId.HasValue)
             {
-                // Dashboard
-                string? filterId = User.IsInRole("Admin") ? null : currentUserId;
+                string? filterId = (User.IsInRole("Admin") || User.IsInRole("Manager")) ? null : currentUserId;
                 tasks = await _taskRepository.GetDashboardTasksAsync(filterId);
             }
             else
             {
-                // Project Page
                 string? filterId = (User.IsInRole("Admin") || User.IsInRole("Manager")) ? null : currentUserId;
                 tasks = await _taskRepository.GetProjectTasksAsync(projectId.Value, filterId);
             }
 
-            // Return directly - Mapping happened in the Repo via ADO.NET
             return Ok(tasks);
         }
 
