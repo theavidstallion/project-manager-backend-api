@@ -30,7 +30,7 @@ namespace ProjectManager.Services
                 ? $"{t.AssignedUserFirstName} {t.AssignedUserLastName}"
                 : "Unassigned",
 
-                // 3. Logic: Convert Comma-Separated Strings to Lists
+                // Convert Comma-Separated Strings to Lists
                 TagIds = !string.IsNullOrEmpty(t.TagIds)
                 ? t.TagIds.Split(',').Select(int.Parse).ToList()
                 : new List<int>(),

@@ -7,6 +7,7 @@ using ProjectManager.Interfaces;
 using ProjectManager.Models;
 using System.Data;
 using ProjectManager.Services;
+using Microsoft.AspNetCore.Authorization;
 
 namespace ProjectManager.Repositories
 {
@@ -156,6 +157,21 @@ namespace ProjectManager.Repositories
             if (toAdd.Any()) await _context.TaskTags.AddRangeAsync(toAdd);
 
             return await _context.SaveChangesAsync() > 0;
+        }
+
+
+
+        // Manager gets Overdue Tasks count
+        public async Task<int> GetOverdueTasksCount(string creatorId)
+        {
+            using var db = new SqlConnection(_context.Database.GetConnectionString());
+
+            var count = await db.ExecuteScalarAsync<int>(
+                    "SELECT dbo.fnOverdueTasksCount(@CreatorId)",
+                    new { CreatorId = creatorId }
+                );
+
+            return count;
         }
 
 

@@ -29,5 +29,8 @@ namespace ProjectManager.Interfaces
         Task<bool> UpdateTaskTagsAsync(int taskId, List<int> tagIds);
 
 
+        Task<int> GetOverdueTasksCount(string creatorId);
+
+
     }
 }

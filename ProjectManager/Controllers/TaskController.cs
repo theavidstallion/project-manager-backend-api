@@ -294,6 +294,21 @@ namespace ProjectManager.Controllers
         // ------------------------------------------------------------------
 
 
+        // Manager gets Overdue Tasks count
+
+        [Authorize(Roles = "Manager")]
+        [HttpGet("overdue-tasks")]  // api/Task/overdue-tasks
+        public async Task<IActionResult> GetOverdueTasksCount()
+        {
+            var creatorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var count = await _taskRepository.GetOverdueTasksCount(creatorId);
+
+            return Ok(new { count = count });
+
+        }
+
+
 
 
     }
