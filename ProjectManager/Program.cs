@@ -50,7 +50,8 @@ builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<IAuthorizationHandler, TaskAuthorizationHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, ProjectAuthorizationHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, CommentAuthorizationHandler>();
-
+builder.Services.AddSingleton<IProjectMappingService, ProjectMappingService>();
+builder.Services.AddSingleton<ITaskMappingService, TaskMappingService>();
 
 
 // 1b. Database & Identity

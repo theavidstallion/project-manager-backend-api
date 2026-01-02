@@ -2,12 +2,12 @@
 
 namespace ProjectManager.Services
 {
-    public class ProjectService
+    public class ProjectAuditService
     {
         private readonly ApplicationDbContext _context;
         private readonly IAuditService _audit;
 
-        public ProjectService(ApplicationDbContext context, IAuditService audit)
+        public ProjectAuditService(ApplicationDbContext context, IAuditService audit)
         {
             _context = context;
             _audit = audit;

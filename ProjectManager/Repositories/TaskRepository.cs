@@ -6,15 +6,18 @@ using ProjectManager.DTOs;
 using ProjectManager.Interfaces;
 using ProjectManager.Models;
 using System.Data;
+using ProjectManager.Services;
 
 namespace ProjectManager.Repositories
 {
     public class TaskRepository : ITaskRepository
     {
         private readonly ApplicationDbContext _context;
-        public TaskRepository(ApplicationDbContext context)
+        private readonly ITaskMappingService _mapper;
+        public TaskRepository(ApplicationDbContext context, ITaskMappingService mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
 
         // -------------------------------------------------
@@ -30,33 +33,9 @@ namespace ProjectManager.Repositories
                 commandType: CommandType.StoredProcedure
             );
 
-            // 2. Map: Convert Flat Result -> Final DTO
-            return flatTasks.Select(t => new TaskResponseDto
-            {
-                Id = t.Id,
-                Title = t.Title,
-                Description = t.Description,
-                Status = t.Status,
-                Priority = t.Priority,
-                DueDate = t.DueDate,
-                CreatorId = t.CreatorId,
-                ProjectId = t.ProjectId,
-                AssignedUserId = t.AssignedUserId,
+            var result = _mapper.TransformFlatDataToDto(flatTasks);
 
-                ProjectName = t.ProjectName,
-                AssignedUserName = t.AssignedUserFirstName != null
-                    ? $"{t.AssignedUserFirstName} {t.AssignedUserLastName}"
-                    : "Unassigned",
-
-                // 3. Logic: Convert Comma-Separated Strings to Lists
-                TagIds = !string.IsNullOrEmpty(t.TagIds)
-                    ? t.TagIds.Split(',').Select(int.Parse).ToList()
-                    : new List<int>(),
-
-                Tags = !string.IsNullOrEmpty(t.TagNames)
-                    ? t.TagNames.Split(',').ToList()
-                    : new List<string>()
-            });
+            return result;
         }
 
         // -------------------------------------------------

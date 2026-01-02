@@ -5,6 +5,7 @@ using ProjectManager.Data;
 using ProjectManager.DTOs;
 using ProjectManager.Interfaces;
 using ProjectManager.Models;
+using ProjectManager.Services;
 using System.Data;
 
 namespace ProjectManager.Repositories
@@ -13,10 +14,12 @@ namespace ProjectManager.Repositories
     public class ProjectRepository : IProjectRepository
     {
         private readonly ApplicationDbContext _context;
+        private readonly IProjectMappingService _mapper;
 
-        public ProjectRepository(ApplicationDbContext context)
+        public ProjectRepository(ApplicationDbContext context, IProjectMappingService mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
 
         // NOTE: Return type changed to the DTO
@@ -24,43 +27,15 @@ namespace ProjectManager.Repositories
         {
             using var connection = new SqlConnection(_context.Database.GetConnectionString());
 
-            // 1. Dapper Fetch: One line replaces DataTable + Adapter + JSON conversion
+            // 2. Fetch Data (The "Raw Material")
             var flatData = await connection.QueryAsync<FlatProjectResult>(
                 "spGetProjects",
                 new { UserId = userId },
                 commandType: CommandType.StoredProcedure
             );
 
-            // 2. Grouping & Mapping: Turn flat rows into nested DTOs
-            var result = flatData
-                .GroupBy(p => p.Id)
-                .Select(g =>
-                {
-                    var project = g.First();
-                    return new ProjectResponseDto
-                    {
-                        Id = project.Id,
-                        Name = project.Name,
-                        Description = project.Description,
-                        StartDate = project.StartDate,
-                        EndDate = project.EndDate,
-                        Status = project.Status,
-                        CreatorId = project.CreatorId,
-                        CreatorName = project.CreatorName,
-
-                        // Handle the list of members
-                        Members = g.Where(m => !string.IsNullOrEmpty(m.MemberId))
-                                   .Select(m => new ProjectMemberDto
-                                   {
-                                       UserId = m.MemberId,
-                                       FirstName = m.MemberFirstName,
-                                       LastName = m.MemberLastName,
-                                       Email = m.MemberEmail
-                                   }).ToList()
-                    };
-                });
-
-            return result;
+            // 3. Transform Data (The "Factory")
+            return _mapper.TransformFlatRowsToDtos(flatData);
         }
 
         public async Task<Project?> GetProjectByIdAsync(int id)
